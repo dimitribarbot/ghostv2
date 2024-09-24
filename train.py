@@ -13,6 +13,7 @@ import torch.nn.functional as F
 import torch
 import torch.optim.lr_scheduler as scheduler
 from torch.amp import GradScaler, autocast
+from safetensors.torch import load_file, save_file
 
 from network.AEI_Net import *
 from network.MultiscaleDiscriminator import *
@@ -155,11 +156,11 @@ def train_one_epoch(G: AEI_Net,
                        "loss_rec": L_rec.item()})
         
         if iteration % 5000 == 0:
-            torch.save(G.state_dict(), f'./results/saved_models_{args.run_name}/G_latest.pth')
-            torch.save(D.state_dict(), f'./results/saved_models_{args.run_name}/D_latest.pth')
+            save_file(G.state_dict(), f'./results/saved_models_{args.run_name}/G_latest.safetensors')
+            save_file(D.state_dict(), f'./results/saved_models_{args.run_name}/D_latest.safetensors')
 
-            torch.save(G.state_dict(), f'./results/current_models_{args.run_name}/G_' + str(epoch)+ '_' + f"{iteration:06}" + '.pth')
-            torch.save(D.state_dict(), f'./results/current_models_{args.run_name}/D_' + str(epoch)+ '_' + f"{iteration:06}" + '.pth')
+            save_file(G.state_dict(), f'./results/current_models_{args.run_name}/G_' + str(epoch)+ '_' + f"{iteration:06}" + '.safetensors')
+            save_file(D.state_dict(), f'./results/current_models_{args.run_name}/D_' + str(epoch)+ '_' + f"{iteration:06}" + '.safetensors')
 
         if (iteration % 250 == 0) and (args.use_wandb):
             # Let's see how the swap looks on three specific photos to track the dynamics
@@ -199,13 +200,13 @@ def train(args, device):
     
     # initializing model for identity extraction
     facenet = InceptionResnetV1()
-    facenet.load_state_dict(torch.load('./weights/Facenet/facenet_pytorch.pt'))
+    facenet.load_state_dict(load_file('./weights/Facenet/facenet_pytorch.safetensors'))
     facenet=facenet.cuda()
     facenet.eval()
     
     if args.eye_detector_loss:
         model_ft = models.FAN(4, "False", "False", 98)
-        checkpoint = torch.load('./weights/AdaptiveWingLoss/WFLW_4HG.pth')
+        checkpoint = load_file('./weights/AdaptiveWingLoss/WFLW_4HG.safetensors')
         if 'state_dict' not in checkpoint:
             model_ft.load_state_dict(checkpoint)
         else:
@@ -232,8 +233,8 @@ def train(args, device):
         
     if args.pretrained:
         try:
-            G.load_state_dict(torch.load(args.G_path, map_location=torch.device('cpu')), strict=False)
-            D.load_state_dict(torch.load(args.D_path, map_location=torch.device('cpu')), strict=False)
+            G.load_state_dict(load_file(args.G_path, device=torch.device('cuda')), strict=False)
+            D.load_state_dict(load_file(args.D_path, device=torch.device('cuda')), strict=False)
             print("Loaded pretrained weights for G and D")
         except FileNotFoundError as e:
             print("Not found pretrained weights. Continue without any pretrained weights.")
@@ -279,8 +280,8 @@ if __name__ == "__main__":
     
     # dataset params
     parser.add_argument('--dataset_path', default='/VggFace2-crop/', help='Path to the dataset. If not VGG2 dataset is used, param --vgg should be set False')
-    parser.add_argument('--G_path', default='./saved_models/G.pth', help='Path to pretrained weights for G. Only used if pretrained=True')
-    parser.add_argument('--D_path', default='./saved_models/D.pth', help='Path to pretrained weights for D. Only used if pretrained=True')
+    parser.add_argument('--G_path', default='./weights/G.safetensors', help='Path to pretrained weights for G. Only used if pretrained=True')
+    parser.add_argument('--D_path', default='./weights/D.safetensors', help='Path to pretrained weights for D. Only used if pretrained=True')
     parser.add_argument('--vgg', action=argparse.BooleanOptionalAction, default=True, type=bool, help='When using VGG2 dataset (or any other dataset with several photos for one identity)')
     # weights for loss
     parser.add_argument('--weight_adv', default=1, type=float, help='Adversarial Loss weight')
