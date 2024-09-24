@@ -17,7 +17,7 @@ class FaceEmbed(TensorDataset):
         self.N = []
         self.same_prob = same_prob
         for data_path in data_path_list:
-            image_list = glob.glob(f'{data_path}/*.*g')
+            image_list = glob.glob(f'{data_path}/**/*.*g')
             datasets.append(image_list)
             self.N.append(len(image_list))
             # with open(f'{data_path}/embed.pkl', 'rb') as f:
