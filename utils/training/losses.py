@@ -7,8 +7,7 @@ l2_loss = torch.nn.MSELoss()
 def hinge_loss(X, positive=True):
     if positive:
         return torch.relu(1-X)
-    else:
-        return torch.relu(X+1)
+    return torch.relu(X+1)
     
     
 def compute_generator_losses(G, Y, Xt, Xt_attr, Di, embed, ZY, eye_heatmaps, loss_adv_accumulated, 

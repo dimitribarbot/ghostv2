@@ -5,6 +5,7 @@ import time
 import cv2
 import wandb
 import os
+from typing import Any, Optional
 
 from torch.utils.data import DataLoader
 import torch.optim as optim
@@ -25,21 +26,24 @@ from facenet.inception_resnet_v1 import InceptionResnetV1
 print("finished imports")
 
 
-def train_one_epoch(G: str,
-                    D: str,
+torch.backends.cudnn.benchmark = True
+
+
+def train_one_epoch(G: AEI_Net,
+                    D: MultiscaleDiscriminator,
                     scaler_G: GradScaler,
                     scaler_D: GradScaler,
-                    opt_G: str,
-                    opt_D: str,
-                    scheduler_G: str,
-                    scheduler_D: str,
+                    opt_G: torch.optim.Optimizer,
+                    opt_D: torch.optim.Optimizer,
+                    scheduler_G: Optional[torch.optim.lr_scheduler.LRScheduler],
+                    scheduler_D: Optional[torch.optim.lr_scheduler.LRScheduler],
                     facenet: InceptionResnetV1,
-                    model_ft: str,
-                    args: str,
+                    model_ft: Optional[models.FAN],
+                    args: Any,
                     dataloader: DataLoader,
-                    device: str,
+                    device: torch.device,
                     epoch:int,
-                    loss_adv_accumulated:int):
+                    loss_adv_accumulated:float):
     '''
     G: generator model
     D: discriminator model
@@ -78,11 +82,12 @@ def train_one_epoch(G: str,
             same_person = diff_person
     
         # generator training
-        opt_G.zero_grad()
+        opt_G.zero_grad(set_to_none=True)
         
         Y, Xt_attr = G(Xt, embed)
         Di = D(Y)
-        ZY = facenet(F.interpolate(Y, [160, 160], mode='bilinear', align_corners=False))
+        with torch.no_grad():
+            ZY = facenet(F.interpolate(Y, [160, 160], mode='bilinear', align_corners=False))
         
         if args.eye_detector_loss:
             Xt_eyes, Xt_heatmap_left, Xt_heatmap_right = detect_landmarks(Xt, model_ft)
@@ -103,7 +108,7 @@ def train_one_epoch(G: str,
             scheduler_G.step()
         
         # discriminator training
-        opt_D.zero_grad()
+        opt_D.zero_grad(set_to_none=True)
         with autocast(device_type='cuda', dtype=torch.float16 if args.fp16 else None):
             lossD = compute_discriminator_loss(D, Y, Xs, diff_person)
         scaler_D.scale(lossD).backward()
@@ -238,7 +243,7 @@ def train(args, device):
     else:
         dataset = FaceEmbed([args.dataset_path], same_prob=args.same_person)
         
-    dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=True, num_workers=8, drop_last=True)
+    dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=True, num_workers=4, drop_last=True, pin_memory=True)
 
     # We will calculate the accumulated adv loss to train the discriminator only when it is below the threshold if discr_force=True
     loss_adv_accumulated = 20.
@@ -311,8 +316,6 @@ if __name__ == "__main__":
     parser.add_argument('--fp16', action=argparse.BooleanOptionalAction, default=True, type=bool)
 
     args = parser.parse_args()
-
-    print(args)
     
     if args.vgg==False and args.same_identity==True:
         raise ValueError("Sorry, you can't use some other dataset than VGG2 Faces with param same_identity=True")

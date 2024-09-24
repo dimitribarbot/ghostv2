@@ -16,20 +16,20 @@ class AddCoordsTh(nn.Module):
         """
         batch_size_tensor = input_tensor.shape[0]
 
-        xx_ones = torch.ones([1, self.y_dim], dtype=torch.int32).cuda()
+        xx_ones = torch.ones([1, self.y_dim], dtype=torch.int32, device='cuda')
         xx_ones = xx_ones.unsqueeze(-1)
 
-        xx_range = torch.arange(self.x_dim, dtype=torch.int32).unsqueeze(0).cuda()
+        xx_range = torch.arange(self.x_dim, dtype=torch.int32, device='cuda').unsqueeze(0)
         xx_range = xx_range.unsqueeze(1)
 
         xx_channel = torch.matmul(xx_ones.float(), xx_range.float())
         xx_channel = xx_channel.unsqueeze(-1)
 
 
-        yy_ones = torch.ones([1, self.x_dim], dtype=torch.int32).cuda()
+        yy_ones = torch.ones([1, self.x_dim], dtype=torch.int32, device='cuda')
         yy_ones = yy_ones.unsqueeze(1)
 
-        yy_range = torch.arange(self.y_dim, dtype=torch.int32).unsqueeze(0).cuda()
+        yy_range = torch.arange(self.y_dim, dtype=torch.int32, device='cuda').unsqueeze(0)
         yy_range = yy_range.unsqueeze(-1)
 
         yy_channel = torch.matmul(yy_range.float(), yy_ones.float())
