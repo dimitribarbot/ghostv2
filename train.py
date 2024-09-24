@@ -162,24 +162,27 @@ def train_one_epoch(G: AEI_Net,
             save_file(G.state_dict(), f'./results/current_models_{args.run_name}/G_' + str(epoch)+ '_' + f"{iteration:06}" + '.safetensors')
             save_file(D.state_dict(), f'./results/current_models_{args.run_name}/D_' + str(epoch)+ '_' + f"{iteration:06}" + '.safetensors')
 
-        if (iteration % 250 == 0) and (args.use_wandb):
+        if (iteration % 250 == 0):
             # Let's see how the swap looks on three specific photos to track the dynamics
             G.eval()
 
-            res1 = get_faceswap('examples/images/training//source1.png', 'examples/images/training//target1.png', G, facenet, device)
-            res2 = get_faceswap('examples/images/training//source2.png', 'examples/images/training//target2.png', G, facenet, device)  
-            res3 = get_faceswap('examples/images/training//source3.png', 'examples/images/training//target3.png', G, facenet, device)
+            res1 = get_faceswap('examples/images/training/source1.png', 'examples/images/training/target1.png', G, facenet, device)
+            res2 = get_faceswap('examples/images/training/source2.png', 'examples/images/training/target2.png', G, facenet, device)  
+            res3 = get_faceswap('examples/images/training/source3.png', 'examples/images/training/target3.png', G, facenet, device)
             
-            res4 = get_faceswap('examples/images/training//source4.png', 'examples/images/training//target4.png', G, facenet, device)
-            res5 = get_faceswap('examples/images/training//source5.png', 'examples/images/training//target5.png', G, facenet, device)  
-            res6 = get_faceswap('examples/images/training//source6.png', 'examples/images/training//target6.png', G, facenet, device)
+            res4 = get_faceswap('examples/images/training/source4.png', 'examples/images/training/target4.png', G, facenet, device)
+            res5 = get_faceswap('examples/images/training/source5.png', 'examples/images/training/target5.png', G, facenet, device)  
+            res6 = get_faceswap('examples/images/training/source6.png', 'examples/images/training/target6.png', G, facenet, device)
             
             output1 = np.concatenate((res1, res2, res3), axis=0)
             output2 = np.concatenate((res4, res5, res6), axis=0)
             
             output = np.concatenate((output1, output2), axis=1)
 
-            wandb.log({"our_images":wandb.Image(output, caption=f"{epoch:03}" + '_' + f"{iteration:06}")})
+            if args.use_wandb:
+                wandb.log({"our_images":wandb.Image(output, caption=f"{epoch:03}" + '_' + f"{iteration:06}")})
+            else:
+                cv2.imwrite('./results/images/our_images.jpg', output[:,:,::-1])
 
             G.train()
 
@@ -332,7 +335,7 @@ if __name__ == "__main__":
         config.weight_rec = args.weight_rec
         config.weight_eyes = args.weight_eyes
         config.same_person = args.same_person
-        config.Vgg2Face = args.vgg
+        config.vgg_to_face = args.vgg
         config.same_identity = args.same_identity
         config.diff_eq_same = args.diff_eq_same
         config.discr_force = args.discr_force
