@@ -5,15 +5,14 @@ import time
 import cv2
 import wandb
 import os
-from typing import Any, Optional
 
 from torch.utils.data import DataLoader
 import torch.optim as optim
 import torch.nn.functional as F
 import torch
 import torch.optim.lr_scheduler as scheduler
-from torch.amp import GradScaler, autocast
 from safetensors.torch import load_file, save_file
+import lightning as L
 
 from network.AEI_Net import *
 from network.MultiscaleDiscriminator import *
@@ -27,255 +26,309 @@ from facenet.inception_resnet_v1 import InceptionResnetV1
 print("finished imports")
 
 
+torch.set_float32_matmul_precision("high")
 torch.backends.cudnn.benchmark = True
 
 
-def train_one_epoch(G: AEI_Net,
-                    D: MultiscaleDiscriminator,
-                    scaler_G: GradScaler,
-                    scaler_D: GradScaler,
-                    opt_G: torch.optim.Optimizer,
-                    opt_D: torch.optim.Optimizer,
-                    scheduler_G: Optional[torch.optim.lr_scheduler.LRScheduler],
-                    scheduler_D: Optional[torch.optim.lr_scheduler.LRScheduler],
-                    facenet: InceptionResnetV1,
-                    model_ft: Optional[models.FAN],
-                    args: Any,
-                    dataloader: DataLoader,
-                    device: torch.device,
-                    epoch:int,
-                    loss_adv_accumulated:float):
-    '''
-    G: generator model
-    D: discriminator model
-    scaler_G: generator scaler
-    scaler_D: discriminator scaler
-    opt_G: generator opt
-    opt_D: discriminator opt
-    scheduler_G: scheduler G opt
-    scheduler_D: scheduler D opt
-    facenet: Facenet model
-    model_ft: Landmark Detector
-    args: Args Namespace
-    dataloader: Torch DataLoader
-    device: Torch device
-    epoch: number of epochs
-    loss_adv_accumulated: loss
-    '''
-    
-    for iteration, data in enumerate(dataloader):
-        start_time = time.time()
-        
-        Xs_orig, Xs, Xt, same_person = data
+class GhostV2DataModule(L.LightningDataModule):
+    def __init__(
+        self,
+        dataset_path: str,
+        same_person=0.2,
+        vgg=True,
+        same_identity=True,
+        batch_size=16,
+        shuffle=True,
+        num_workers=4,
+        drop_last=True,
+        pin_memory=True,
+    ):
+        super().__init__()
+        self.dataset_path = dataset_path
+        self.same_person = same_person
+        self.vgg = vgg
+        self.same_identity = same_identity
+        self.batch_size = batch_size
+        self.shuffle = shuffle
+        self.num_workers = num_workers
+        self.drop_last = drop_last
+        self.pin_memory = pin_memory
 
-        Xs_orig = Xs_orig.to(device)
-        Xs = Xs.to(device)
-        Xt = Xt.to(device)
-        same_person = same_person.to(device)
+
+    def setup(self, stage=None):
+        if args.vgg:
+            self.dataset = FaceEmbedVGG2(self.dataset_path, same_prob=self.same_person, same_identity=self.same_identity)
+        else:
+            self.dataset = FaceEmbed([self.dataset_path], same_prob=self.same_person)
+
+
+    def train_dataloader(self):
+        return DataLoader(
+            self.dataset,
+            batch_size=self.batch_size,
+            shuffle=self.shuffle,
+            num_workers=self.num_workers,
+            drop_last=self.drop_last,
+            pin_memory=self.pin_memory
+        )
+
+
+class GhostV2Module(L.LightningModule):
+    def __init__(
+        self,
+        args,
+        backbone="unet",
+        num_blocks=2,
+        lr_G=4e-4,
+        lr_D=4e-4,
+        b1_G=0,
+        b2_G=0.999,
+        b1_D=0,
+        b2_D=0.999,
+        wd_G=1e-4,
+        wd_D=1e-4,
+        batch_size=16,
+        **kwargs,
+    ):
+        super().__init__()
+        self.save_hyperparameters()
+        self.automatic_optimization = False
+
+        self.args = args
+
+        self.G = AEI_Net(backbone, num_blocks=num_blocks, c_id=512)
+        self.D = MultiscaleDiscriminator(input_nc=3, n_layers=5, norm_layer=torch.nn.InstanceNorm2d)
+        self.G.train()
+        self.D.train()
+
+
+    def setup(self, stage=None):
+        self.loss_adv_accumulated = 20.
+        
+        if self.args.pretrained:
+            try:
+                self.G.load_state_dict(load_file(self.args.G_path, device=self.device), strict=False)
+                self.D.load_state_dict(load_file(self.args.D_path, device=self.device), strict=False)
+                print("Loaded pretrained weights for G and D")
+            except FileNotFoundError as e:
+                print("Not found pretrained weights. Continue without any pretrained weights.")
+
+        self.facenet = InceptionResnetV1()
+        self.facenet.load_state_dict(load_file('./weights/Facenet/facenet_pytorch.safetensors'))
+        self.facenet = self.facenet.to(self.device)
+        self.facenet.eval()
+
+        if args.eye_detector_loss:
+            self.model_ft = models.FAN(4, "False", "False", 98)
+            checkpoint = load_file('./weights/AdaptiveWingLoss/WFLW_4HG.safetensors')
+            if 'state_dict' not in checkpoint:
+                self.model_ft.load_state_dict(checkpoint)
+            else:
+                pretrained_weights = checkpoint['state_dict']
+                model_weights = self.model_ft.state_dict()
+                pretrained_weights = {k: v for k, v in pretrained_weights.items() \
+                                    if k in model_weights}
+                model_weights.update(pretrained_weights)
+                self.model_ft.load_state_dict(model_weights)
+            self.model_ft = self.model_ft.to(self.device)
+            self.model_ft.eval()
+        else:
+            self.model_ft=None
+
+
+    def forward(self, Xt, embed):
+        return self.G(Xt, embed)
+
+    
+    def on_train_batch_start(self, batch, batch_idx):
+        self.start_time = time.time()
+
+    
+    def training_step(self, batch):
+        Xs_orig, Xs, Xt, same_person = batch
+
+        opt_G, opt_D = self.optimizers()
+        if self.args.scheduler:
+            scheduler_G, scheduler_D = self.lr_schedulers()
 
         # get the identity embeddings of Xs
         with torch.no_grad():
-            embed = facenet(F.interpolate(Xs_orig, [160, 160], mode='bilinear', align_corners=False))
+            embed = self.facenet(F.interpolate(Xs_orig, [160, 160], mode='bilinear', align_corners=False))
 
-        diff_person = torch.ones_like(same_person)
+        diff_person = torch.ones_like(same_person, device=self.device)
 
-        if args.diff_eq_same:
+        if self.args.diff_eq_same:
             same_person = diff_person
-    
+
         # generator training
-        opt_G.zero_grad(set_to_none=True)
-        
-        Y, Xt_attr = G(Xt, embed)
-        Di = D(Y)
+        Y, Xt_attr = self(Xt, embed)
+        Di = self.D(Y)
         with torch.no_grad():
-            ZY = facenet(F.interpolate(Y, [160, 160], mode='bilinear', align_corners=False))
+            ZY = self.facenet(F.interpolate(Y, [160, 160], mode='bilinear', align_corners=False))
         
-        if args.eye_detector_loss:
-            Xt_eyes, Xt_heatmap_left, Xt_heatmap_right = detect_landmarks(Xt, model_ft)
-            Y_eyes, Y_heatmap_left, Y_heatmap_right = detect_landmarks(Y, model_ft)
+        if self.args.eye_detector_loss:
+            Xt_eyes, Xt_heatmap_left, Xt_heatmap_right = detect_landmarks(Xt, self.model_ft)
+            Y_eyes, Y_heatmap_left, Y_heatmap_right = detect_landmarks(Y, self.model_ft)
             eye_heatmaps = [Xt_heatmap_left, Xt_heatmap_right, Y_heatmap_left, Y_heatmap_right]
         else:
             eye_heatmaps = None
         
-        with autocast(device_type='cuda', dtype=torch.float16 if args.fp16 else None):
-            lossG, loss_adv_accumulated, L_adv, L_attr, L_id, L_rec, L_l2_eyes = compute_generator_losses(G, Y, Xt, Xt_attr, Di,
-                                                                                embed, ZY, eye_heatmaps,loss_adv_accumulated, 
-                                                                                diff_person, same_person, args)
+        lossG, self.loss_adv_accumulated, L_adv, L_attr, L_id, L_rec, L_l2_eyes = compute_generator_losses(
+            self.G, Y, Xt, Xt_attr, Di, embed, ZY, eye_heatmaps, self.loss_adv_accumulated, diff_person, same_person, self.args)
         
-        scaler_G.scale(lossG).backward()
-        scaler_G.step(opt_G)
-        scaler_G.update()
-        if args.scheduler:
+        opt_G.zero_grad()
+        self.manual_backward(lossG)
+        opt_G.step()
+        if self.args.scheduler:
             scheduler_G.step()
-        
+
         # discriminator training
-        opt_D.zero_grad(set_to_none=True)
-        with autocast(device_type='cuda', dtype=torch.float16 if args.fp16 else None):
-            lossD = compute_discriminator_loss(D, Y, Xs, diff_person)
-        scaler_D.scale(lossD).backward()
+        lossD = compute_discriminator_loss(self.D, Y, Xs, diff_person)
 
-        if (not args.discr_force) or (loss_adv_accumulated < 4.):
-            scaler_D.step(opt_D)
-            scaler_D.update()
-        if args.scheduler:
+        opt_D.zero_grad()
+        self.manual_backward(lossD)
+        if (not self.args.discr_force) or (self.loss_adv_accumulated < 4.):
+            opt_D.step()
+        if self.args.scheduler:
             scheduler_D.step()
-        
-        
-        batch_time = time.time() - start_time
 
-        if iteration % args.show_step == 0:
-            images = [Xs, Xt, Y]
-            if args.eye_detector_loss:
-                Xt_eyes_img = paint_eyes(Xt, Xt_eyes)
-                Yt_eyes_img = paint_eyes(Y, Y_eyes)
+        return {
+            "Xs": Xs,
+            "Xt": Xt,
+            "Xt_eyes": Xt_eyes if self.args.eye_detector_loss else None,
+            "Y": Y,
+            "Y_eyes": Y_eyes if self.args.eye_detector_loss else None,
+            "loss_eyes": L_l2_eyes.item() if self.args.eye_detector_loss else None,
+            "loss_id": L_id.item(),
+            "lossD": lossD.item(),
+            "lossG": lossG.item(),
+            "loss_adv": L_adv.item(),
+            "loss_attr": L_attr.item(),
+            "loss_rec": L_rec.item(),
+        }
+
+
+    def configure_optimizers(self):
+        lr_G = self.hparams.lr_G
+        lr_D = self.hparams.lr_D
+        b1_G = self.hparams.b1_G
+        b2_G = self.hparams.b2_G
+        b1_D = self.hparams.b1_D
+        b2_D = self.hparams.b2_D
+        wd_G = self.hparams.wd_G
+        wd_D = self.hparams.wd_D
+
+        opt_G = optim.Adam(self.G.parameters(), lr=lr_G, betas=(b1_G, b2_G), weight_decay=wd_G)
+        opt_D = optim.Adam(self.D.parameters(), lr=lr_D, betas=(b1_D, b2_D), weight_decay=wd_D)
+
+        if self.args.scheduler:
+            scheduler_G = scheduler.StepLR(opt_G, step_size=self.args.scheduler_step, gamma=self.args.scheduler_gamma)
+            scheduler_D = scheduler.StepLR(opt_D, step_size=self.args.scheduler_step, gamma=self.args.scheduler_gamma)
+            return [opt_G, opt_D], [scheduler_G, scheduler_D]
+
+        return [opt_G, opt_D], []
+
+    
+    def on_train_batch_end(self, outputs, batch, batch_idx):
+        batch_time = time.time() - self.start_time
+
+        if batch_idx % self.args.show_step == 0:
+            images = [outputs["Xs"], outputs["Xt"], outputs["Y"]]
+            if self.args.eye_detector_loss:
+                Xt_eyes_img = paint_eyes(outputs["Xt"], outputs["Xt_eyes"])
+                Yt_eyes_img = paint_eyes(outputs["Y"], outputs["Y_eyes"])
                 images.extend([Xt_eyes_img, Yt_eyes_img])
             image = make_image_list(images)
-            if args.use_wandb:
-                wandb.log({"gen_images":wandb.Image(image, caption=f"{epoch:03}" + '_' + f"{iteration:06}")})
+            if self.args.use_wandb:
+                wandb.log({"gen_images":wandb.Image(image, caption=f"{self.current_epoch:03}" + '_' + f"{batch_idx:06}")})
             else:
                 cv2.imwrite('./results/images/generated_image.jpg', image[:,:,::-1])
         
-        if iteration % 10 == 0:
-            print(f'epoch: {epoch}    {iteration} / {len(dataloader)}')
-            print(f'lossD: {lossD.item()}    lossG: {lossG.item()} batch_time: {batch_time}s')
-            print(f'L_adv: {L_adv.item()} L_id: {L_id.item()} L_attr: {L_attr.item()} L_rec: {L_rec.item()}')
-            if args.eye_detector_loss:
-                print(f'L_l2_eyes: {L_l2_eyes.item()}')
-            print(f'loss_adv_accumulated: {loss_adv_accumulated}')
-            if args.scheduler:
+        if batch_idx % 10 == 0:
+            print(f'epoch: {self.current_epoch}    {batch_idx} / {self.trainer.num_training_batches}')
+            print(f'lossD: {outputs["lossD"]}    lossG: {outputs["lossG"]} batch_time: {batch_time}s')
+            print(f'L_adv: {outputs["loss_adv"]} L_id: {outputs["loss_id"]} L_attr: {outputs["loss_attr"]} L_rec: {outputs["loss_rec"]}')
+            if self.args.eye_detector_loss:
+                print(f'L_l2_eyes: {outputs["loss_eyes"]}')
+            print(f'loss_adv_accumulated: {self.loss_adv_accumulated}')
+            if self.args.scheduler:
+                scheduler_G, scheduler_D = self.lr_schedulers()
                 print(f'scheduler_G lr: {scheduler_G.get_last_lr()} scheduler_D lr: {scheduler_D.get_last_lr()}')
         
-        if args.use_wandb:
-            if args.eye_detector_loss:
-                wandb.log({"loss_eyes": L_l2_eyes.item()}, commit=False)
-            wandb.log({"loss_id": L_id.item(),
-                       "lossD": lossD.item(),
-                       "lossG": lossG.item(),
-                       "loss_adv": L_adv.item(),
-                       "loss_attr": L_attr.item(),
-                       "loss_rec": L_rec.item()})
+        if self.args.use_wandb:
+            if self.args.eye_detector_loss:
+                wandb.log({"loss_eyes": outputs["loss_eyes"]}, commit=False)
+            wandb.log({"loss_id": outputs["loss_id"],
+                       "lossD": outputs["lossD"],
+                       "lossG": outputs["lossG"],
+                       "loss_adv": outputs["loss_adv"],
+                       "loss_attr": outputs["loss_attr"],
+                       "loss_rec": outputs["loss_rec"]})
         
-        if iteration % 5000 == 0:
-            save_file(G.state_dict(), f'./results/saved_models_{args.run_name}/G_latest.safetensors')
-            save_file(D.state_dict(), f'./results/saved_models_{args.run_name}/D_latest.safetensors')
+        if batch_idx % 5000 == 0:
+            save_file(self.G.state_dict(), f'./results/saved_models_{self.args.run_name}/G_latest.safetensors')
+            save_file(self.D.state_dict(), f'./results/saved_models_{self.args.run_name}/D_latest.safetensors')
 
-            save_file(G.state_dict(), f'./results/current_models_{args.run_name}/G_' + str(epoch)+ '_' + f"{iteration:06}" + '.safetensors')
-            save_file(D.state_dict(), f'./results/current_models_{args.run_name}/D_' + str(epoch)+ '_' + f"{iteration:06}" + '.safetensors')
+            save_file(self.G.state_dict(), f'./results/current_models_{self.args.run_name}/G_' + str(self.current_epoch)+ '_' + f"{batch_idx:06}" + '.safetensors')
+            save_file(self.D.state_dict(), f'./results/current_models_{self.args.run_name}/D_' + str(self.current_epoch)+ '_' + f"{batch_idx:06}" + '.safetensors')
 
-        if (iteration % 250 == 0):
+        if (batch_idx % 250 == 0):
             # Let's see how the swap looks on three specific photos to track the dynamics
-            G.eval()
+            self.G.eval()
 
-            res1 = get_faceswap('examples/images/training/source1.png', 'examples/images/training/target1.png', G, facenet, device)
-            res2 = get_faceswap('examples/images/training/source2.png', 'examples/images/training/target2.png', G, facenet, device)  
-            res3 = get_faceswap('examples/images/training/source3.png', 'examples/images/training/target3.png', G, facenet, device)
+            res1 = get_faceswap('examples/images/training/source1.png', 'examples/images/training/target1.png', self.G, self.facenet, self.device)
+            res2 = get_faceswap('examples/images/training/source2.png', 'examples/images/training/target2.png', self.G, self.facenet, self.device)  
+            res3 = get_faceswap('examples/images/training/source3.png', 'examples/images/training/target3.png', self.G, self.facenet, self.device)
             
-            res4 = get_faceswap('examples/images/training/source4.png', 'examples/images/training/target4.png', G, facenet, device)
-            res5 = get_faceswap('examples/images/training/source5.png', 'examples/images/training/target5.png', G, facenet, device)  
-            res6 = get_faceswap('examples/images/training/source6.png', 'examples/images/training/target6.png', G, facenet, device)
+            res4 = get_faceswap('examples/images/training/source4.png', 'examples/images/training/target4.png', self.G, self.facenet, self.device)
+            res5 = get_faceswap('examples/images/training/source5.png', 'examples/images/training/target5.png', self.G, self.facenet, self.device)  
+            res6 = get_faceswap('examples/images/training/source6.png', 'examples/images/training/target6.png', self.G, self.facenet, self.device)
             
             output1 = np.concatenate((res1, res2, res3), axis=0)
             output2 = np.concatenate((res4, res5, res6), axis=0)
             
             output = np.concatenate((output1, output2), axis=1)
 
-            if args.use_wandb:
-                wandb.log({"our_images":wandb.Image(output, caption=f"{epoch:03}" + '_' + f"{iteration:06}")})
+            if self.args.use_wandb:
+                wandb.log({"our_images":wandb.Image(output, caption=f"{self.current_epoch:03}" + '_' + f"{batch_idx:06}")})
             else:
                 cv2.imwrite('./results/images/our_images.jpg', output[:,:,::-1])
 
-            G.train()
+            self.G.train()
 
-
-def train(args, device):
-    # training params
-    batch_size = args.batch_size
-    max_epoch = args.max_epoch
-    
-    # initializing main models
-    G = AEI_Net(args.backbone, num_blocks=args.num_blocks, c_id=512).to(device)
-    D = MultiscaleDiscriminator(input_nc=3, n_layers=5, norm_layer=torch.nn.InstanceNorm2d).to(device)
-    G.train()
-    D.train()
-
-    scaler_G = GradScaler()
-    scaler_D = GradScaler()
-    
-    # initializing model for identity extraction
-    facenet = InceptionResnetV1()
-    facenet.load_state_dict(load_file('./weights/Facenet/facenet_pytorch.safetensors'))
-    facenet=facenet.cuda()
-    facenet.eval()
-    
-    if args.eye_detector_loss:
-        model_ft = models.FAN(4, "False", "False", 98)
-        checkpoint = load_file('./weights/AdaptiveWingLoss/WFLW_4HG.safetensors')
-        if 'state_dict' not in checkpoint:
-            model_ft.load_state_dict(checkpoint)
-        else:
-            pretrained_weights = checkpoint['state_dict']
-            model_weights = model_ft.state_dict()
-            pretrained_weights = {k: v for k, v in pretrained_weights.items() \
-                                  if k in model_weights}
-            model_weights.update(pretrained_weights)
-            model_ft.load_state_dict(model_weights)
-        model_ft = model_ft.to(device)
-        model_ft.eval()
-    else:
-        model_ft=None
-    
-    opt_G = optim.Adam(G.parameters(), lr=args.lr_G, betas=(0, 0.999), weight_decay=1e-4)
-    opt_D = optim.Adam(D.parameters(), lr=args.lr_D, betas=(0, 0.999), weight_decay=1e-4)
-    
-    if args.scheduler:
-        scheduler_G = scheduler.StepLR(opt_G, step_size=args.scheduler_step, gamma=args.scheduler_gamma)
-        scheduler_D = scheduler.StepLR(opt_D, step_size=args.scheduler_step, gamma=args.scheduler_gamma)
-    else:
-        scheduler_G = None
-        scheduler_D = None
-        
-    if args.pretrained:
-        try:
-            G.load_state_dict(load_file(args.G_path, device=torch.device('cuda')), strict=False)
-            D.load_state_dict(load_file(args.D_path, device=torch.device('cuda')), strict=False)
-            print("Loaded pretrained weights for G and D")
-        except FileNotFoundError as e:
-            print("Not found pretrained weights. Continue without any pretrained weights.")
-    
-    if args.vgg:
-        dataset = FaceEmbedVGG2(args.dataset_path, same_prob=args.same_person, same_identity=args.same_identity)
-    else:
-        dataset = FaceEmbed([args.dataset_path], same_prob=args.same_person)
-        
-    dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=True, num_workers=4, drop_last=True, pin_memory=True)
-
-    # We will calculate the accumulated adv loss to train the discriminator only when it is below the threshold if discr_force=True
-    loss_adv_accumulated = 20.
-    
-    for epoch in range(0, max_epoch):
-        train_one_epoch(G,
-                        D,
-                        scaler_G,
-                        scaler_D,
-                        opt_G,
-                        opt_D,
-                        scheduler_G,
-                        scheduler_D,
-                        facenet,
-                        model_ft,
-                        args,
-                        dataloader,
-                        device,
-                        epoch,
-                        loss_adv_accumulated)
 
 def main(args):
-    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     if not torch.cuda.is_available():
         print('cuda is not available. using cpu. check if it\'s ok')
+
+    print("Creating PyTorch Lightning trainer")
+    trainer = L.Trainer(
+        max_epochs=args.max_epoch,
+        limit_val_batches=0,
+    )
+
+    print("Creating GhostV2 Data Module")
+    dm = GhostV2DataModule(
+        args.dataset_path,
+        same_person=args.same_person,
+        vgg=args.vgg,
+        same_identity=args.same_identity,
+        batch_size=args.batch_size,
+    )
+
+    print("Creating GhostV2 Module")
+    with trainer.init_module():
+        model = GhostV2Module(
+            args,
+            backbone=args.backbone,
+            num_blocks=args.num_blocks,
+            lr_G=args.lr_G,
+            lr_D=args.lr_D,
+            batch_size=args.batch_size,
+        )
     
     print("Starting training")
-    train(args, device=device)
+    trainer.fit(model, dm)
 
     
 if __name__ == "__main__":
@@ -317,7 +370,6 @@ if __name__ == "__main__":
     parser.add_argument('--max_epoch', default=2000, type=int)
     parser.add_argument('--show_step', default=500, type=int)
     parser.add_argument('--save_epoch', default=1, type=int)
-    parser.add_argument('--fp16', action=argparse.BooleanOptionalAction, default=True, type=bool)
 
     args = parser.parse_args()
     

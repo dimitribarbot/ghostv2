@@ -5,4 +5,5 @@ __pycache__
 
 weights/
 results/
+lightning_logs/
 venv/

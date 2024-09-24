@@ -22,10 +22,7 @@ def compute_generator_losses(G, Y, Xt, Xt_attr, Di, embed, ZY, eye_heatmaps, los
     L_id =(1 - torch.cosine_similarity(embed, ZY, dim=1)).mean()
 
     # attr loss
-    if args.fp16:
-        Y_attr = G.get_attr(Y.type(torch.half))
-    else:
-        Y_attr = G.get_attr(Y)
+    Y_attr = G.get_attr(Y)
     
     L_attr = 0
     for i in range(len(Xt_attr)):
