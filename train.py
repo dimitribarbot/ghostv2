@@ -349,7 +349,7 @@ def main(args: TrainingArguments):
             "lr_G": args.lr_G,
             "lr_D": args.lr_D,
         })
-        callbacks.append(GhostV2WandbCallback)
+        callbacks.append(GhostV2WandbCallback())
 
     print("Creating PyTorch Lightning trainer")
     trainer = L.Trainer(
