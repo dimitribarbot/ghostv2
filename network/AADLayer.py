@@ -34,7 +34,7 @@ class AADLayer(nn.Module):
 
         M = torch.sigmoid(self.conv_h(h))
 
-        out = (torch.ones(M.size()).type_as(M) - M) * A + M * I
+        out = (torch.ones_like(M).to(M.device) - M) * A + M * I
         return out
 
     

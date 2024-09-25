@@ -6,3 +6,4 @@ wandb
 tqdm
 lightning[extra]
 safetensors
+simple-parsing

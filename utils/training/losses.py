@@ -4,7 +4,7 @@ l1_loss = torch.nn.L1Loss()
 l2_loss = torch.nn.MSELoss()
 
 
-def hinge_loss(X, positive=True):
+def hinge_loss(X, positive):
     if positive:
         return torch.relu(1-X)
     return torch.relu(X+1)
@@ -41,7 +41,7 @@ def compute_generator_losses(G, Y, Xt, Xt_attr, Di, embed, ZY, eye_heatmaps, los
         
     # final loss of generator
     lossG = args.weight_adv*L_adv + args.weight_attr*L_attr + args.weight_id*L_id + args.weight_rec*L_rec + args.weight_eyes*L_l2_eyes
-    loss_adv_accumulated = loss_adv_accumulated*0.98 + L_adv.item()*0.02
+    loss_adv_accumulated = loss_adv_accumulated*0.98 + L_adv*0.02
     
     return lossG, loss_adv_accumulated, L_adv, L_attr, L_id, L_rec, L_l2_eyes
 

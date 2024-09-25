@@ -66,7 +66,7 @@ def read_torch_image(path: str) -> torch.tensor:
 
 def get_faceswap(source_path: str,
                  target_path: str,
-                 G: str,
+                 G: Any,
                  facenet: Any, 
                  device: str) -> np.array:
     '''G: generator model, facenet: Facenet model, device: torch device'''
@@ -77,7 +77,7 @@ def get_faceswap(source_path: str,
     # embeds = F.normalize(embeds, p=2, dim=1)
 
     target = read_torch_image(target_path)
-    target = target.cuda()
+    target = target.to(device)
 
     with torch.no_grad():
         Yt, _ = G(target, embeds)
