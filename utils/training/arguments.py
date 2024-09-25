@@ -5,6 +5,9 @@ from simple_parsing.helpers import flag
 
 @dataclass
 class TrainingArguments:
+    """ Info about this run """
+    run_name: str                                                           # Name of this run. Used to create folders where to save the weights.
+
     """ Dataset params """
     dataset_path: str = "/VggFace2-crop/"                                   # Path to the dataset. If not VGG2 dataset is used, param --vgg should be set False
     G_path: str = "./weights/G.safetensors"                                 # Path to pretrained weights for G. Only used if pretrained=True
@@ -31,11 +34,9 @@ class TrainingArguments:
     scheduler_gamma: float = 0.2                                            # It is value, which shows how many times to decrease LR
     eye_detector_loss: bool = flag(default=False, negative_prefix="--no-")  # If True eye loss with using AdaptiveWingLoss detector is applied to generator
 
-    """ Info about this run """
+    """ W&B logging """
     use_wandb: bool = flag(default=False, negative_prefix="--no-")          # Use wandb to track your experiments or not
-    run_name: str = "ghost-v2"                                              # Name of this run. Used to create folders where to save the weights.
     wandb_project: str = "GhostV2"
-    wandb_entity: str = "your-login"
 
     """ Training params you probably don't want to change """
     batch_size: int = 16
