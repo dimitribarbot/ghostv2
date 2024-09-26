@@ -121,17 +121,17 @@ class GhostV2Module(L.LightningModule):
                 print("Not found pretrained weights. Continue without any pretrained weights.")
 
         self.facenet = InceptionResnetV1()
-        self.facenet.load_state_dict(load_file('./weights/Facenet/facenet_pytorch.safetensors'))
+        self.facenet.load_state_dict(load_file("./weights/Facenet/facenet_pytorch.safetensors"))
         self.facenet = self.facenet.to(self.device)
         self.facenet.eval()
 
         if args.eye_detector_loss:
             self.model_ft = models.FAN(4, "False", "False", 98)
-            checkpoint = load_file('./weights/AdaptiveWingLoss/WFLW_4HG.safetensors')
-            if 'state_dict' not in checkpoint:
+            checkpoint = load_file("./weights/AdaptiveWingLoss/WFLW_4HG.safetensors")
+            if "state_dict" not in checkpoint:
                 self.model_ft.load_state_dict(checkpoint)
             else:
-                pretrained_weights = checkpoint['state_dict']
+                pretrained_weights = checkpoint["state_dict"]
                 model_weights = self.model_ft.state_dict()
                 pretrained_weights = {k: v for k, v in pretrained_weights.items() \
                                     if k in model_weights}
@@ -147,12 +147,18 @@ class GhostV2Module(L.LightningModule):
         Xs_orig, Xs, Xt, same_person = batch
 
         opt_G, opt_D = cast(List[LightningOptimizer], self.optimizers())
+
+        # Hack to avoid double count of global_step
+        # See https://github.com/Lightning-AI/pytorch-lightning/issues/17958 for more information
+        opt_D._on_before_step = lambda: self.trainer.profiler.start("optimizer_step")
+        opt_D._on_after_step = lambda: self.trainer.profiler.stop("optimizer_step")
+
         if self.args.scheduler:
             scheduler_G, scheduler_D = self.lr_schedulers()
 
         # get the identity embeddings of Xs
         with torch.no_grad():
-            embed = self.facenet(F.interpolate(Xs_orig, [160, 160], mode='bilinear', align_corners=False))
+            embed = self.facenet(F.interpolate(Xs_orig, [160, 160], mode="bilinear", align_corners=False))
 
         diff_person = torch.ones_like(same_person, device=self.device)
 
@@ -164,7 +170,7 @@ class GhostV2Module(L.LightningModule):
 
         Y, Xt_attr = self.G(Xt, embed)
         Di = self.D(Y)
-        ZY = self.facenet(F.interpolate(Y, [160, 160], mode='bilinear', align_corners=False))
+        ZY = self.facenet(F.interpolate(Y, [160, 160], mode="bilinear", align_corners=False))
         
         if self.args.eye_detector_loss:
             Xt_eyes, Xt_heatmap_left, Xt_heatmap_right = detect_landmarks(Xt, self.model_ft)
@@ -233,13 +239,13 @@ class GhostV2EvalCallback(L.Callback):
             # Let's see how the swap looks on three specific photos to track the dynamics
             pl_module.G.eval()
 
-            res1 = get_faceswap('examples/images/training/source1.png', 'examples/images/training/target1.png', pl_module.G, pl_module.facenet, pl_module.device)
-            res2 = get_faceswap('examples/images/training/source2.png', 'examples/images/training/target2.png', pl_module.G, pl_module.facenet, pl_module.device)  
-            res3 = get_faceswap('examples/images/training/source3.png', 'examples/images/training/target3.png', pl_module.G, pl_module.facenet, pl_module.device)
+            res1 = get_faceswap("examples/images/training/source1.png", "examples/images/training/target1.png", pl_module.G, pl_module.facenet, pl_module.device)
+            res2 = get_faceswap("examples/images/training/source2.png", "examples/images/training/target2.png", pl_module.G, pl_module.facenet, pl_module.device)  
+            res3 = get_faceswap("examples/images/training/source3.png", "examples/images/training/target3.png", pl_module.G, pl_module.facenet, pl_module.device)
             
-            res4 = get_faceswap('examples/images/training/source4.png', 'examples/images/training/target4.png', pl_module.G, pl_module.facenet, pl_module.device)
-            res5 = get_faceswap('examples/images/training/source5.png', 'examples/images/training/target5.png', pl_module.G, pl_module.facenet, pl_module.device)  
-            res6 = get_faceswap('examples/images/training/source6.png', 'examples/images/training/target6.png', pl_module.G, pl_module.facenet, pl_module.device)
+            res4 = get_faceswap("examples/images/training/source4.png", "examples/images/training/target4.png", pl_module.G, pl_module.facenet, pl_module.device)
+            res5 = get_faceswap("examples/images/training/source5.png", "examples/images/training/target5.png", pl_module.G, pl_module.facenet, pl_module.device)  
+            res6 = get_faceswap("examples/images/training/source6.png", "examples/images/training/target6.png", pl_module.G, pl_module.facenet, pl_module.device)
             
             output1 = np.concatenate((res1, res2, res3), axis=0)
             output2 = np.concatenate((res4, res5, res6), axis=0)
@@ -247,9 +253,9 @@ class GhostV2EvalCallback(L.Callback):
             output = np.concatenate((output1, output2), axis=1)
 
             if pl_module.args.use_wandb:
-                wandb.log({"our_images":wandb.Image(output, caption=f"{pl_module.current_epoch:03}" + '_' + f"{batch_idx:06}")})
+                wandb.log({"our_images":wandb.Image(output, caption=f"{pl_module.current_epoch:03}_{batch_idx:06}")})
             else:
-                cv2.imwrite('./results/images/our_images.jpg', output[:,:,::-1])
+                cv2.imwrite("./results/images/our_images.jpg", output[:,:,::-1])
 
             pl_module.G.train()
     
@@ -264,9 +270,9 @@ class GhostV2ShowStepCallback(L.Callback):
                 images.extend([Xt_eyes_img, Yt_eyes_img])
             image = make_image_list(images)
             if pl_module.args.use_wandb:
-                wandb.log({"gen_images":wandb.Image(image, caption=f"{pl_module.current_epoch:03}" + '_' + f"{batch_idx:06}")})
+                wandb.log({"gen_images":wandb.Image(image, caption=f"{pl_module.current_epoch:03}_{batch_idx:06}")})
             else:
-                cv2.imwrite('./results/images/generated_image.jpg', image[:,:,::-1])
+                cv2.imwrite("./results/images/generated_image.jpg", image[:,:,::-1])
     
 
 class GhostV2LoggingCallback(L.Callback):
@@ -274,46 +280,48 @@ class GhostV2LoggingCallback(L.Callback):
         self.start_time = time.time()
 
     def on_train_batch_end(self, trainer, pl_module: GhostV2Module, outputs, batch, batch_idx):        
-        if batch_idx % 10 == 0:
+        if batch_idx % 50 == 0:
             batch_time = time.time() - self.start_time
-            print(f'epoch: {pl_module.current_epoch}    {batch_idx} / {pl_module.trainer.num_training_batches}')
-            print(f'lossD: {outputs["lossD"]}    lossG: {outputs["lossG"]} batch_time: {batch_time}s')
-            print(f'L_adv: {outputs["loss_adv"]} L_id: {outputs["loss_id"]} L_attr: {outputs["loss_attr"]} L_rec: {outputs["loss_rec"]}')
+            print(f"epoch: {pl_module.current_epoch}    {batch_idx} / {pl_module.trainer.num_training_batches}")
+            print(f"lossD: {outputs["lossD"]}    lossG: {outputs["lossG"]} batch_time: {batch_time}s")
+            print(f"L_adv: {outputs["loss_adv"]} L_id: {outputs["loss_id"]} L_attr: {outputs["loss_attr"]} L_rec: {outputs["loss_rec"]}")
             if pl_module.args.eye_detector_loss:
-                print(f'L_l2_eyes: {outputs["loss_eyes"]}')
-            print(f'loss_adv_accumulated: {pl_module.loss_adv_accumulated}')
+                print(f"L_l2_eyes: {outputs["loss_eyes"]}")
+            print(f"loss_adv_accumulated: {pl_module.loss_adv_accumulated}")
             if pl_module.args.scheduler:
                 scheduler_G, scheduler_D = pl_module.lr_schedulers()
-                print(f'scheduler_G lr: {scheduler_G.get_last_lr()} scheduler_D lr: {scheduler_D.get_last_lr()}')
+                print(f"scheduler_G lr: {scheduler_G.get_last_lr()} scheduler_D lr: {scheduler_D.get_last_lr()}")
     
 
 class GhostV2CheckpointCallback(L.Callback):
     def on_train_batch_end(self, trainer, pl_module: GhostV2Module, outputs, batch, batch_idx):
-        iteration = pl_module.global_step // 2
+        iteration = pl_module.global_step
 
-        if iteration % 5000 == 0:
-            save_file(pl_module.G.state_dict(), f'./results/saved_models_{pl_module.args.run_name}/G_latest.safetensors')
-            save_file(pl_module.D.state_dict(), f'./results/saved_models_{pl_module.args.run_name}/D_latest.safetensors')
+        if iteration > 0 and iteration % 5000 == 0:
+            save_file(pl_module.G.state_dict(), f"./results/saved_models_{pl_module.args.run_name}/G_latest.safetensors")
+            save_file(pl_module.D.state_dict(), f"./results/saved_models_{pl_module.args.run_name}/D_latest.safetensors")
 
-            save_file(pl_module.G.state_dict(), f'./results/current_models_{pl_module.args.run_name}/G_' + str(pl_module.current_epoch)+ '_' + f"{batch_idx:06}" + '.safetensors')
-            save_file(pl_module.D.state_dict(), f'./results/current_models_{pl_module.args.run_name}/D_' + str(pl_module.current_epoch)+ '_' + f"{batch_idx:06}" + '.safetensors')
+            save_file(pl_module.G.state_dict(), f"./results/current_models_{pl_module.args.run_name}/G_{str(pl_module.current_epoch)}_{batch_idx:06}.safetensors")
+            save_file(pl_module.D.state_dict(), f"./results/current_models_{pl_module.args.run_name}/D_{str(pl_module.current_epoch)}_{batch_idx:06}.safetensors")
     
 
 class GhostV2WandbCallback(L.Callback):
     def on_train_batch_end(self, trainer, pl_module: GhostV2Module, outputs, batch, batch_idx):
         if pl_module.args.eye_detector_loss:
-            wandb.log({"loss_eyes": outputs["loss_eyes"].item()}, commit=False)
+            wandb.log({"loss_eyes": outputs["loss_eyes"].item(),
+                       "trainer/global_step": pl_module.global_step}, commit=False)
         wandb.log({"loss_id": outputs["loss_id"].item(),
-                    "lossD": outputs["lossD"].item(),
-                    "lossG": outputs["lossG"].item(),
-                    "loss_adv": outputs["loss_adv"].item(),
-                    "loss_attr": outputs["loss_attr"].item(),
-                    "loss_rec": outputs["loss_rec"].item()})
+                   "lossD": outputs["lossD"].item(),
+                   "lossG": outputs["lossG"].item(),
+                   "loss_adv": outputs["loss_adv"].item(),
+                   "loss_attr": outputs["loss_attr"].item(),
+                   "loss_rec": outputs["loss_rec"].item(),
+                   "trainer/global_step": pl_module.global_step})
 
 
 def main(args: TrainingArguments):
     if not torch.cuda.is_available():
-        print('cuda is not available. using cpu. check if it\'s ok')
+        print("Cuda is not available, using CPU. Check if it's ok.")
 
     callbacks = [
         GhostV2ShowStepCallback(),
@@ -355,6 +363,7 @@ def main(args: TrainingArguments):
     trainer = L.Trainer(
         max_epochs=args.max_epoch,
         limit_val_batches=0,
+        default_root_dir=f"./results/current_models_{args.run_name}",
         logger=logger,
         callbacks=callbacks,
     )
@@ -391,13 +400,13 @@ if __name__ == "__main__":
     if args.vgg==False and args.same_identity==True:
         raise ValueError("Sorry, you can't use some other dataset than VGG2 Faces with param same_identity=True")
     
-    if not os.path.exists('./results/images'):
-        os.makedirs('./results/images')
+    if not os.path.exists("./results/images"):
+        os.makedirs("./results/images")
     
     # Create folders to store the latest model weights, as well as weights from each era
-    if not os.path.exists(f'./results/saved_models_{args.run_name}'):
-        os.makedirs(f'./results/saved_models_{args.run_name}')
-    if not os.path.exists(f'./results/current_models_{args.run_name}'):
-        os.makedirs(f'./results/current_models_{args.run_name}')
+    if not os.path.exists(f"./results/saved_models_{args.run_name}"):
+        os.makedirs(f"./results/saved_models_{args.run_name}")
+    if not os.path.exists(f"./results/current_models_{args.run_name}"):
+        os.makedirs(f"./results/current_models_{args.run_name}")
     
     main(args)
