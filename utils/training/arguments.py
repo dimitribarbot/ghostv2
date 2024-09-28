@@ -11,7 +11,7 @@ class TrainingArguments:
 
     """ Dataset params """
     dataset_path: str = "/VggFace2-crop/"                                   # Path to the dataset. If not VGG2 dataset is used, param --vgg should be set False
-    ckpt_path: Optional[str] = None                                         # Path to checkpoint to resume training. Defaults to G_path and D_path if empty.
+    ckpt_path: Optional[str] = None                                         # Path to checkpoint to resume training.
     G_path: str = "./weights/G.safetensors"                                 # Path to pretrained weights for G. Only used if pretrained=True
     D_path: str = "./weights/D.safetensors"                                 # Path to pretrained weights for D. Only used if pretrained=True
     vgg: bool = flag(default=True, negative_prefix="--no-")                 # When using VGG2 dataset (or any other dataset with several photos for one identity)
@@ -51,7 +51,8 @@ class TrainingArguments:
     wd_G: float = 1e-4
     wd_D: float = 1e-4
     max_epoch: int = 20
-    show_step: int = 10000
+    show_step: int = 2500
+    save_epoch: int = 1
     precision: Optional[str] = choice(
         None,
         "64",

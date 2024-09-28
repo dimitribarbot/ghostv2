@@ -15,8 +15,9 @@ import torch
 import torch.optim.lr_scheduler as scheduler
 from safetensors.torch import load_file, save_file
 import lightning as L
-from lightning.pytorch.core.optimizer import LightningOptimizer
 from lightning.pytorch import loggers as pl_loggers
+from lightning.pytorch.core.optimizer import LightningOptimizer
+from lightning.pytorch.callbacks import ModelCheckpoint
 
 from network.AEI_Net import *
 from network.MultiscaleDiscriminator import *
@@ -211,7 +212,7 @@ class GhostV2Module(L.LightningModule):
 
 class GhostV2EvalCallback(L.Callback):
     def on_train_batch_end(self, trainer, pl_module: GhostV2Module, outputs, batch, batch_idx):
-        if (batch_idx % 250 == 0):
+        if (batch_idx % 2500 == 0):
             # Let's see how the swap looks on three specific photos to track the dynamics
             pl_module.G.eval()
 
@@ -256,7 +257,7 @@ class GhostV2LoggingCallback(L.Callback):
         self.start_time = time.time()
 
     def on_train_batch_end(self, trainer, pl_module: GhostV2Module, outputs, batch, batch_idx):        
-        if batch_idx % 50 == 0:
+        if batch_idx % 100 == 0:
             batch_time = time.time() - self.start_time
             print(f"epoch: {pl_module.current_epoch}    {batch_idx} / {pl_module.trainer.num_training_batches}")
             print(f"lossD: {outputs['lossD']}    lossG: {outputs['lossG']} batch_time: {batch_time}s")
@@ -271,9 +272,7 @@ class GhostV2LoggingCallback(L.Callback):
 
 class GhostV2CheckpointCallback(L.Callback):
     def on_train_batch_end(self, trainer, pl_module: GhostV2Module, outputs, batch, batch_idx):
-        iteration = pl_module.global_step
-
-        if iteration > 0 and iteration % 20000 == 0:
+        if batch_idx > 0 and batch_idx % 25000 == 0:
             save_file(pl_module.G.state_dict(), f"./results/saved_models_{pl_module.args.run_name}/G_latest.safetensors")
             save_file(pl_module.D.state_dict(), f"./results/saved_models_{pl_module.args.run_name}/D_latest.safetensors")
 
@@ -304,10 +303,16 @@ def main(args: TrainingArguments):
         GhostV2LoggingCallback(),
         GhostV2CheckpointCallback(),
         GhostV2EvalCallback(),
+        ModelCheckpoint(
+            dirpath=f"./results/current_models_{args.run_name}",
+            every_n_epochs=args.save_epoch,
+        )
     ]
 
     if args.use_wandb:
-        logger = pl_loggers.WandbLogger(project=args.wandb_project)
+        logger = pl_loggers.WandbLogger(
+            project=args.wandb_project,
+        )
         logger.experiment.config.update({
             "dataset_path": args.dataset_path,
             "weight_adv": args.weight_adv,
@@ -341,8 +346,6 @@ def main(args: TrainingArguments):
     print("Creating PyTorch Lightning trainer")
     trainer = L.Trainer(
         max_epochs=args.max_epoch,
-        limit_val_batches=0,
-        default_root_dir=f"./results/current_models_{args.run_name}",
         logger=logger,
         callbacks=callbacks,
         precision=args.precision,
