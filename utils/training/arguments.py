@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+from typing import Optional
 
 from simple_parsing import choice
 from simple_parsing.helpers import flag
@@ -10,6 +11,7 @@ class TrainingArguments:
 
     """ Dataset params """
     dataset_path: str = "/VggFace2-crop/"                                   # Path to the dataset. If not VGG2 dataset is used, param --vgg should be set False
+    ckpt_path: Optional[str] = None                                         # Path to checkpoint to resume training. Defaults to G_path and D_path if empty.
     G_path: str = "./weights/G.safetensors"                                 # Path to pretrained weights for G. Only used if pretrained=True
     D_path: str = "./weights/D.safetensors"                                 # Path to pretrained weights for D. Only used if pretrained=True
     vgg: bool = flag(default=True, negative_prefix="--no-")                 # When using VGG2 dataset (or any other dataset with several photos for one identity)
@@ -29,7 +31,7 @@ class TrainingArguments:
     diff_eq_same: bool = flag(default=False, negative_prefix="--no-")       # Don't use info about where is defferent identities
     pretrained: bool = flag(default=True, negative_prefix="--no-")          # If using the pretrained weights for training or not
     discr_force: bool = flag(default=False, negative_prefix="--no-")        # If True Discriminator would not train when adversarial loss is high
-    scheduler: bool = flag(default=False, negative_prefix="--no-")          # If True decreasing LR is used for learning of generator and discriminator
+    use_scheduler: bool = flag(default=False, negative_prefix="--no-")      # If True decreasing LR is used for learning of generator and discriminator
     scheduler_step: int = 5000
     scheduler_gamma: float = 0.2                                            # It is value, which shows how many times to decrease LR
     eye_detector_loss: bool = flag(default=False, negative_prefix="--no-")  # If True eye loss with using AdaptiveWingLoss detector is applied to generator
@@ -42,6 +44,27 @@ class TrainingArguments:
     batch_size: int = 16
     lr_G: float = 4e-4
     lr_D: float = 4e-4
-    max_epoch: int = 2000
-    show_step: int = 500
-    save_epoch: int = 1
+    b1_G: float = 0
+    b1_D: float = 0
+    b2_G: float = 0.999
+    b2_D: float = 0.999
+    wd_G: float = 1e-4
+    wd_D: float = 1e-4
+    max_epoch: int = 20
+    show_step: int = 10000
+    precision: Optional[str] = choice(
+        None,
+        "64",
+        "32",
+        "16",
+        "bf16",
+        "transformer-engine",
+        "transformer-engine-float16",
+        "16-true",
+        "16-mixed",
+        "bf16-true",
+        "bf16-mixed",
+        "32-true",
+        "64-true",
+        default=None
+    )

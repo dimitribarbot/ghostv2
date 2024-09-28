@@ -61,7 +61,7 @@ class GhostV2DataModule(L.LightningDataModule):
 
 
     def setup(self, stage=None):
-        if args.vgg:
+        if self.vgg:
             self.dataset = FaceEmbedVGG2(self.dataset_path, same_prob=self.same_person, same_identity=self.same_identity)
         else:
             self.dataset = FaceEmbed([self.dataset_path], same_prob=self.same_person)
@@ -79,29 +79,14 @@ class GhostV2DataModule(L.LightningDataModule):
 
 
 class GhostV2Module(L.LightningModule):
-    def __init__(
-        self,
-        args: TrainingArguments,
-        backbone="unet",
-        num_blocks=2,
-        lr_G=4e-4,
-        lr_D=4e-4,
-        b1_G=0,
-        b2_G=0.999,
-        b1_D=0,
-        b2_D=0.999,
-        wd_G=1e-4,
-        wd_D=1e-4,
-        batch_size=16,
-        **kwargs,
-    ):
+    def __init__(self, args: TrainingArguments):
         super().__init__()
         self.save_hyperparameters()
         self.automatic_optimization = False
 
         self.args = args
 
-        self.G = AEI_Net(backbone, num_blocks=num_blocks, c_id=512)
+        self.G = AEI_Net(args.backbone, num_blocks=args.num_blocks, c_id=512)
         self.D = MultiscaleDiscriminator(input_nc=3, n_layers=5, norm_layer=torch.nn.InstanceNorm2d)
         self.G = cast(AEI_Net, torch.compile(self.G))
         self.D = cast(MultiscaleDiscriminator, torch.compile(self.D))
@@ -125,7 +110,7 @@ class GhostV2Module(L.LightningModule):
         self.facenet = self.facenet.to(self.device)
         self.facenet.eval()
 
-        if args.eye_detector_loss:
+        if self.args.eye_detector_loss:
             self.model_ft = models.FAN(4, "False", "False", 98)
             checkpoint = load_file("./weights/AdaptiveWingLoss/WFLW_4HG.safetensors")
             if "state_dict" not in checkpoint:
@@ -153,7 +138,7 @@ class GhostV2Module(L.LightningModule):
         opt_D._on_before_step = lambda: self.trainer.profiler.start("optimizer_step")
         opt_D._on_after_step = lambda: self.trainer.profiler.stop("optimizer_step")
 
-        if self.args.scheduler:
+        if self.args.use_scheduler:
             scheduler_G, scheduler_D = self.lr_schedulers()
 
         # get the identity embeddings of Xs
@@ -184,7 +169,7 @@ class GhostV2Module(L.LightningModule):
         
         self.manual_backward(lossG)
         opt_G.step()
-        if self.args.scheduler:
+        if self.args.use_scheduler:
             scheduler_G.step()
 
         # discriminator training
@@ -193,7 +178,7 @@ class GhostV2Module(L.LightningModule):
         self.manual_backward(lossD)
         if (not self.args.discr_force) or (self.loss_adv_accumulated < 4.):
             opt_D.step()
-        if self.args.scheduler:
+        if self.args.use_scheduler:
             scheduler_D.step()
 
         return {
@@ -213,19 +198,10 @@ class GhostV2Module(L.LightningModule):
 
 
     def configure_optimizers(self):
-        lr_G = self.hparams.lr_G
-        lr_D = self.hparams.lr_D
-        b1_G = self.hparams.b1_G
-        b2_G = self.hparams.b2_G
-        b1_D = self.hparams.b1_D
-        b2_D = self.hparams.b2_D
-        wd_G = self.hparams.wd_G
-        wd_D = self.hparams.wd_D
+        opt_G = optim.Adam(self.G.parameters(), lr=self.args.lr_G, betas=(self.args.b1_G, self.args.b2_G), weight_decay=self.args.wd_G)
+        opt_D = optim.Adam(self.D.parameters(), lr=self.args.lr_D, betas=(self.args.b1_D, self.args.b2_D), weight_decay=self.args.wd_D)
 
-        opt_G = optim.Adam(self.G.parameters(), lr=lr_G, betas=(b1_G, b2_G), weight_decay=wd_G)
-        opt_D = optim.Adam(self.D.parameters(), lr=lr_D, betas=(b1_D, b2_D), weight_decay=wd_D)
-
-        if self.args.scheduler:
+        if self.args.use_scheduler:
             scheduler_G = scheduler.StepLR(opt_G, step_size=self.args.scheduler_step, gamma=self.args.scheduler_gamma)
             scheduler_D = scheduler.StepLR(opt_D, step_size=self.args.scheduler_step, gamma=self.args.scheduler_gamma)
             return [opt_G, opt_D], [scheduler_G, scheduler_D]
@@ -283,12 +259,12 @@ class GhostV2LoggingCallback(L.Callback):
         if batch_idx % 50 == 0:
             batch_time = time.time() - self.start_time
             print(f"epoch: {pl_module.current_epoch}    {batch_idx} / {pl_module.trainer.num_training_batches}")
-            print(f"lossD: {outputs["lossD"]}    lossG: {outputs["lossG"]} batch_time: {batch_time}s")
-            print(f"L_adv: {outputs["loss_adv"]} L_id: {outputs["loss_id"]} L_attr: {outputs["loss_attr"]} L_rec: {outputs["loss_rec"]}")
+            print(f"lossD: {outputs['lossD']}    lossG: {outputs['lossG']} batch_time: {batch_time}s")
+            print(f"L_adv: {outputs['loss_adv']} L_id: {outputs['loss_id']} L_attr: {outputs['loss_attr']} L_rec: {outputs['loss_rec']}")
             if pl_module.args.eye_detector_loss:
-                print(f"L_l2_eyes: {outputs["loss_eyes"]}")
+                print(f"L_l2_eyes: {outputs['loss_eyes']}")
             print(f"loss_adv_accumulated: {pl_module.loss_adv_accumulated}")
-            if pl_module.args.scheduler:
+            if pl_module.args.use_scheduler:
                 scheduler_G, scheduler_D = pl_module.lr_schedulers()
                 print(f"scheduler_G lr: {scheduler_G.get_last_lr()} scheduler_D lr: {scheduler_D.get_last_lr()}")
     
@@ -297,7 +273,7 @@ class GhostV2CheckpointCallback(L.Callback):
     def on_train_batch_end(self, trainer, pl_module: GhostV2Module, outputs, batch, batch_idx):
         iteration = pl_module.global_step
 
-        if iteration > 0 and iteration % 5000 == 0:
+        if iteration > 0 and iteration % 20000 == 0:
             save_file(pl_module.G.state_dict(), f"./results/saved_models_{pl_module.args.run_name}/G_latest.safetensors")
             save_file(pl_module.D.state_dict(), f"./results/saved_models_{pl_module.args.run_name}/D_latest.safetensors")
 
@@ -330,7 +306,6 @@ def main(args: TrainingArguments):
         GhostV2EvalCallback(),
     ]
 
-    logger = None
     if args.use_wandb:
         logger = pl_loggers.WandbLogger(project=args.wandb_project)
         logger.experiment.config.update({
@@ -345,19 +320,23 @@ def main(args: TrainingArguments):
             "same_identity": args.same_identity,
             "diff_eq_same": args.diff_eq_same,
             "discr_force": args.discr_force,
-            "scheduler": args.scheduler,
+            "scheduler": args.use_scheduler,
             "scheduler_step": args.scheduler_step,
             "scheduler_gamma": args.scheduler_gamma,
             "eye_detector_loss": args.eye_detector_loss,
             "pretrained": args.pretrained,
             "run_name": args.run_name,
+            "ckpt_path": args.ckpt_path,
             "G_path": args.G_path,
             "D_path": args.D_path,
             "batch_size": args.batch_size,
             "lr_G": args.lr_G,
             "lr_D": args.lr_D,
+            "precision": args.precision,
         })
         callbacks.append(GhostV2WandbCallback())
+    else:
+        logger = pl_loggers.TensorBoardLogger(save_dir=os.getcwd(), version=args.run_name)
 
     print("Creating PyTorch Lightning trainer")
     trainer = L.Trainer(
@@ -366,6 +345,7 @@ def main(args: TrainingArguments):
         default_root_dir=f"./results/current_models_{args.run_name}",
         logger=logger,
         callbacks=callbacks,
+        precision=args.precision,
     )
 
     print("Creating GhostV2 Data Module")
@@ -379,17 +359,10 @@ def main(args: TrainingArguments):
 
     print("Creating GhostV2 Module")
     with trainer.init_module():
-        model = GhostV2Module(
-            args,
-            backbone=args.backbone,
-            num_blocks=args.num_blocks,
-            lr_G=args.lr_G,
-            lr_D=args.lr_D,
-            batch_size=args.batch_size,
-        )
+        model = GhostV2Module(args)
     
     print("Starting training")
-    trainer.fit(model, dm)
+    trainer.fit(model, dm, ckpt_path=args.ckpt_path)
 
     
 if __name__ == "__main__":
