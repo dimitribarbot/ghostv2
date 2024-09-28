@@ -232,7 +232,7 @@ class GhostV2EvalCallback(L.Callback):
             if pl_module.args.use_wandb:
                 wandb.log({"our_images":wandb.Image(output, caption=f"{pl_module.current_epoch:03}_{batch_idx:06}")})
             else:
-                cv2.imwrite("./results/images/our_images.jpg", output[:,:,::-1])
+                cv2.imwrite("./experiments/images/our_images.jpg", output[:,:,::-1])
 
             pl_module.G.train()
     
@@ -249,7 +249,7 @@ class GhostV2ShowStepCallback(L.Callback):
             if pl_module.args.use_wandb:
                 wandb.log({"gen_images":wandb.Image(image, caption=f"{pl_module.current_epoch:03}_{batch_idx:06}")})
             else:
-                cv2.imwrite("./results/images/generated_image.jpg", image[:,:,::-1])
+                cv2.imwrite("./experiments/images/generated_image.jpg", image[:,:,::-1])
     
 
 class GhostV2LoggingCallback(L.Callback):
@@ -273,11 +273,11 @@ class GhostV2LoggingCallback(L.Callback):
 class GhostV2CheckpointCallback(L.Callback):
     def on_train_batch_end(self, trainer, pl_module: GhostV2Module, outputs, batch, batch_idx):
         if batch_idx > 0 and batch_idx % 25000 == 0:
-            save_file(pl_module.G.state_dict(), f"./results/saved_models_{pl_module.args.run_name}/G_latest.safetensors")
-            save_file(pl_module.D.state_dict(), f"./results/saved_models_{pl_module.args.run_name}/D_latest.safetensors")
+            save_file(pl_module.G.state_dict(), f"./experiments/saved_models_{pl_module.args.run_name}/G_latest.safetensors")
+            save_file(pl_module.D.state_dict(), f"./experiments/saved_models_{pl_module.args.run_name}/D_latest.safetensors")
 
-            save_file(pl_module.G.state_dict(), f"./results/current_models_{pl_module.args.run_name}/G_{str(pl_module.current_epoch)}_{batch_idx:06}.safetensors")
-            save_file(pl_module.D.state_dict(), f"./results/current_models_{pl_module.args.run_name}/D_{str(pl_module.current_epoch)}_{batch_idx:06}.safetensors")
+            save_file(pl_module.G.state_dict(), f"./experiments/current_models_{pl_module.args.run_name}/G_{str(pl_module.current_epoch)}_{batch_idx:06}.safetensors")
+            save_file(pl_module.D.state_dict(), f"./experiments/current_models_{pl_module.args.run_name}/D_{str(pl_module.current_epoch)}_{batch_idx:06}.safetensors")
     
 
 class GhostV2WandbCallback(L.Callback):
@@ -304,7 +304,7 @@ def main(args: TrainingArguments):
         GhostV2CheckpointCallback(),
         GhostV2EvalCallback(),
         ModelCheckpoint(
-            dirpath=f"./results/current_models_{args.run_name}",
+            dirpath=f"./experiments/current_models_{args.run_name}",
             every_n_epochs=args.save_epoch,
         )
     ]
@@ -376,13 +376,13 @@ if __name__ == "__main__":
     if args.vgg==False and args.same_identity==True:
         raise ValueError("Sorry, you can't use some other dataset than VGG2 Faces with param same_identity=True")
     
-    if not os.path.exists("./results/images"):
-        os.makedirs("./results/images")
+    if not os.path.exists("./experiments/images"):
+        os.makedirs("./experiments/images")
     
     # Create folders to store the latest model weights, as well as weights from each era
-    if not os.path.exists(f"./results/saved_models_{args.run_name}"):
-        os.makedirs(f"./results/saved_models_{args.run_name}")
-    if not os.path.exists(f"./results/current_models_{args.run_name}"):
-        os.makedirs(f"./results/current_models_{args.run_name}")
+    if not os.path.exists(f"./experiments/saved_models_{args.run_name}"):
+        os.makedirs(f"./experiments/saved_models_{args.run_name}")
+    if not os.path.exists(f"./experiments/current_models_{args.run_name}"):
+        os.makedirs(f"./experiments/current_models_{args.run_name}")
     
     main(args)

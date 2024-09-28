@@ -4,7 +4,7 @@
 __pycache__
 
 weights/
-results/
+experiments/
 lightning_logs/
 venv/
 wandb/

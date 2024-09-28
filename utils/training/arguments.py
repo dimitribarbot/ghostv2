@@ -28,7 +28,7 @@ class TrainingArguments:
     num_blocks: int = 2                                                     # Numbers of AddBlocks at AddResblock
     same_person: float = 0.2                                                # Probability of using same person identity during training
     same_identity: bool = flag(default=True, negative_prefix="--no-")       # Using simswap approach, when source_id = target_id. Only possible with vgg=True
-    diff_eq_same: bool = flag(default=False, negative_prefix="--no-")       # Don't use info about where is defferent identities
+    diff_eq_same: bool = flag(default=False, negative_prefix="--no-")       # Don't use info about where is different identities
     pretrained: bool = flag(default=True, negative_prefix="--no-")          # If using the pretrained weights for training or not
     discr_force: bool = flag(default=False, negative_prefix="--no-")        # If True Discriminator would not train when adversarial loss is high
     use_scheduler: bool = flag(default=False, negative_prefix="--no-")      # If True decreasing LR is used for learning of generator and discriminator
