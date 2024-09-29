@@ -259,7 +259,7 @@ def get_face_sort_key(face1: Dict[str, np.ndarray], face2: Dict[str, np.ndarray]
 
 
 def filter_faces(faces: List[Dict[str, np.ndarray]], min_original_face_size: int):
-    return filter(lambda face: is_face_size_ok(face, min_original_face_size), faces)
+    return list(filter(lambda face: is_face_size_ok(face, min_original_face_size), faces))
 
 
 def sort_retargeted_faces(faces: List[Dict[str, np.ndarray]]):
@@ -267,9 +267,10 @@ def sort_retargeted_faces(faces: List[Dict[str, np.ndarray]]):
 
 
 def verify_retargeted_faces_have_same_length(all_faces: List[List[Dict[str, np.ndarray]]]):
-    it = iter(all_faces)
-    length = len(next(it))
-    return all(len(l) == length for l in it)
+    if len(all_faces) > 0:
+        length = len(all_faces[0])
+        return all(len(l) == length for l in all_faces)
+    return True
 
 
 def process(
@@ -319,6 +320,8 @@ def process(
 
                         faces = face_detector(image, threshold=0.99, return_dict=True)
                         faces = filter_faces(faces, args.min_original_face_size)
+                        if len(faces) == 0:
+                            continue
 
                         eye_and_lip_ratios = get_retargeted_image_ratios(
                             live_portrait_pipeline,
@@ -347,7 +350,6 @@ def process(
 
                             retargeted_image_faces = sort_retargeted_faces(
                                 retargeted_images_faces[image_index],
-                                args.min_original_face_size
                             )
                             
                             for retargeted_face_index, retargeted_face in enumerate(retargeted_image_faces):
