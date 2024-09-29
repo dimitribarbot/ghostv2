@@ -152,6 +152,7 @@ def get_faceswap(source_path: str,
 def align_warp_face(image, landmarks):
     """Align and warp faces with face template.
     """
+    image = cv2.cvtColor(image, cv2.COLOR_RGB2BGR)
     # use 5 landmarks to get affine matrix
     # use cv2.LMEDS method for the equivalence to skimage transform
     # ref: https://blog.csdn.net/yichxi/article/details/115827338

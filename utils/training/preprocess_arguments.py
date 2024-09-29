@@ -20,6 +20,7 @@ class PreprocessArguments:
     """ Model arguments """
     gfpgan_model_path: str = make_real_path("./weights/GFPGAN/GFPGANv1.4.safetensors")
     retina_face_model_path: str = make_real_path("./weights/RetinaFace/Resnet50_Final.safetensors")
+    face_alignment_model_path: str = make_real_path("./weights/FaceAlignment/s3fd-619a316812.safetensors")
     live_portrait_landmark_model_path: str = make_real_path("./weights/LivePortrait/landmark_model.pth")
     live_portrait_F_model_path: str = make_real_path("./weights/LivePortrait/appearance_feature_extractor.safetensors")
     live_portrait_M_model_path: str = make_real_path("./weights/LivePortrait/motion_extractor.safetensors")
@@ -36,5 +37,5 @@ class PreprocessArguments:
     """ Retargeting options """
     number_of_variants_per_face: int = 7
     retargeting_do_crop: bool = flag(default=True, negative_prefix="--no-")
-    retargeting_crop_scale: float = 3.5
+    retargeting_crop_scale: float = 2.3
     save_retargeted: bool = flag(default=False, negative_prefix="--no-")

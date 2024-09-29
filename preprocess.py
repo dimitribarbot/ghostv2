@@ -20,6 +20,7 @@ from GFPGAN.gfpganv1_clean_arch import GFPGANv1Clean
 from LivePortrait.pipeline import LivePortraitPipeline
 from LivePortrait.utils.io import load_img_online
 from RetinaFace.detector import RetinaFace
+from face_alignment import FaceAlignment, LandmarksType
 from utils.training.preprocess_arguments import PreprocessArguments
 from utils.training.image_processing import align_warp_face, img2tensor, tensor2img
 
@@ -271,6 +272,7 @@ def verify_retargeted_faces_have_same_length(all_faces: List[List[Dict[str, np.n
 
 def process(
     face_detector: RetinaFace,
+    face_alignment: FaceAlignment,
     live_portrait_pipeline: LivePortraitPipeline,
     gfpgan: GFPGANv1Clean,
     args: PreprocessArguments,
@@ -314,7 +316,19 @@ def process(
                         if not image.shape[0] > args.min_original_image_size or not image.shape[1] > args.min_original_image_size:
                             continue
 
-                        faces = face_detector(image, threshold=0.99, return_dict=True)
+                        faces = []
+                        landmarks, landmark_scores, detected_faces = face_alignment.get_landmarks_from_image(
+                            image,
+                            return_bboxes=True,
+                            return_landmark_score=True,
+                        )
+                        for landmark, landmark_score, detected_face in zip(landmarks, landmark_scores, detected_faces):
+                            faces.append({
+                                "box": detected_face,
+                                "score": landmark_score,
+                                "kps": landmark
+                            })
+
                         faces = filter_faces(faces, args.min_original_face_size)
                         if len(faces) == 0:
                             continue
@@ -409,6 +423,17 @@ def main(args: PreprocessArguments):
         model_path=args.retina_face_model_path
     )
 
+    face_alignment = FaceAlignment(
+        LandmarksType.TWO_D,
+        flip_input=False,
+        device=device,
+        dtype=torch.float16,
+        face_detector="sfd",
+        face_detector_kwargs={
+            "path_to_detector": args.face_alignment_model_path
+        }
+    )
+
     live_portrait_pipeline = LivePortraitPipeline(
         args.live_portrait_landmark_model_path,
         args.live_portrait_F_model_path,
@@ -419,7 +444,7 @@ def main(args: PreprocessArguments):
         device
     )
 
-    process(face_detector, live_portrait_pipeline, gfpgan, args, device)
+    process(face_detector, face_alignment, live_portrait_pipeline, gfpgan, args, device)
 
 
 if __name__ == "__main__":
