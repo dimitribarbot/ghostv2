@@ -262,14 +262,10 @@ def filter_faces(faces: List[Dict[str, np.ndarray]], min_original_face_size: int
     return list(filter(lambda face: is_face_size_ok(face, min_original_face_size), faces))
 
 
-def sort_retargeted_faces(faces: List[Dict[str, np.ndarray]]):
-    return sorted(faces, key=functools.cmp_to_key(get_face_sort_key))
-
-
-def verify_retargeted_faces_have_same_length(all_faces: List[List[Dict[str, np.ndarray]]]):
+def verify_retargeted_faces_have_same_length(all_faces: List[List[Dict[str, np.ndarray]]], min_original_face_size: int):
     if len(all_faces) > 0:
-        length = len(all_faces[0])
-        return all(len(l) == length for l in all_faces)
+        length = len(filter_faces(all_faces[0], min_original_face_size))
+        return all(len(filter_faces(l, min_original_face_size)) == length for l in all_faces)
     return True
 
 
@@ -344,13 +340,19 @@ def process(
 
                         retargeted_images_faces = face_detector(retargeted_images, threshold=0.99, return_dict=True, cv=True)
 
+                        if not verify_retargeted_faces_have_same_length(retargeted_images_faces, args.min_original_face_size):
+                            continue
+
                         for image_index, retargeted_image in enumerate(retargeted_images):
-                            if not verify_retargeted_faces_have_same_length(retargeted_images_faces[image_index]):
+                            retargeted_image_faces = filter_faces(
+                                retargeted_images_faces[image_index],
+                                args.min_original_face_size
+                            )
+
+                            if len(retargeted_image_faces) == 0:
                                 continue
 
-                            retargeted_image_faces = sort_retargeted_faces(
-                                retargeted_images_faces[image_index],
-                            )
+                            retargeted_image_faces.sort(key=functools.cmp_to_key(get_face_sort_key))
                             
                             for retargeted_face_index, retargeted_face in enumerate(retargeted_image_faces):
                                 image_name = f'{id}_{retargeted_face_index:02d}'
