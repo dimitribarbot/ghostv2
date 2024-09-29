@@ -7,3 +7,6 @@ tqdm
 lightning[extra]
 safetensors
 simple-parsing
+onnx2torch
+pyarrow
+img2dataset

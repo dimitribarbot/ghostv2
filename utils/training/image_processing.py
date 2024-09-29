@@ -16,6 +16,11 @@ transformer_Facenet = transforms.Compose([
 ])
 
 
+# standard 5 landmarks for FFHQ faces with 512 x 512
+# facexlib
+face_template = np.array([[192.98138, 239.94708], [318.90277, 240.1936], [256.63416, 314.01935], [201.26117, 371.41043], [313.08905, 371.15118]])
+
+
 def torch2image(torch_image: torch.tensor) -> np.ndarray:
     batch = False
     
@@ -142,4 +147,17 @@ def get_faceswap(source_path: str,
     target = torch2image(target)
 
     return np.concatenate((cv2.resize(source, (256, 256)), target, Yt), axis=1)
-        
+
+
+def align_warp_face(image, landmarks):
+    """Align and warp faces with face template.
+    """
+    image = cv2.cvtColor(image, cv2.COLOR_RGB2BGR)
+    # use 5 landmarks to get affine matrix
+    # use cv2.LMEDS method for the equivalence to skimage transform
+    # ref: https://blog.csdn.net/yichxi/article/details/115827338
+    affine_matrix = cv2.estimateAffinePartial2D(landmarks, face_template, method=cv2.LMEDS)[0]
+    # warp and crop faces
+    cropped_face = cv2.warpAffine(
+        image, affine_matrix, (512, 512), borderMode=cv2.BORDER_CONSTANT, borderValue=(135, 133, 132))  # gray
+    return cropped_face

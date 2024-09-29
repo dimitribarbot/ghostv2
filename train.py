@@ -22,7 +22,7 @@ from lightning.pytorch.callbacks import ModelCheckpoint
 from network.AEI_Net import *
 from network.MultiscaleDiscriminator import *
 from AdaptiveWingLoss.core import models
-from utils.training.arguments import TrainingArguments
+from utils.training.training_arguments import TrainingArguments
 from utils.training.Dataset import FaceEmbedVGG2, FaceEmbed
 from utils.training.image_processing import make_image_list, get_faceswap
 from utils.training.losses import compute_discriminator_loss, compute_generator_losses
