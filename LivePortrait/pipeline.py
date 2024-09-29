@@ -148,7 +148,7 @@ class LivePortraitPipeline(object):
         input_image: cv2.typing.MatLike,
         original_lmk: np.ndarray,
         do_crop: bool, 
-        crop_scale=3.5,
+        crop_scale: float,
     ):
         img_rgb = load_img_online(input_image, mode='rgb', max_dim=1280, n=16)
         if do_crop:
@@ -174,7 +174,7 @@ class LivePortraitPipeline(object):
         input_head_yaw_variation,
         input_head_roll_variation,
         do_crop: bool,
-        crop_scale=3.5,
+        crop_scale: float,
     ):
         img_rgb = load_img_online(input_image, mode='rgb', max_dim=1280, n=2)
         if do_crop:
@@ -224,10 +224,11 @@ class LivePortraitPipeline(object):
         eyeball_direction_x: float,
         eyeball_direction_y: float,
         do_crop: bool,
+        crop_scale: float,
     ):
         f_s_user, x_s_user, R_s_user, R_d_user, x_s_info, source_lmk_user, crop_M_c2o, mask_ori, img_rgb = \
             self.prepare_retargeting_image(
-                input_image, original_lmk, input_head_pitch_variation, input_head_yaw_variation, input_head_roll_variation, do_crop)
+                input_image, original_lmk, input_head_pitch_variation, input_head_yaw_variation, input_head_roll_variation, do_crop, crop_scale)
         if source_lmk_user is None:
             return None
 
