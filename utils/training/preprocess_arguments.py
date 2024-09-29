@@ -35,7 +35,7 @@ class PreprocessArguments:
     final_crop_size: int = 224
 
     """ Retargeting options """
-    number_of_variants_per_face: int = 7
+    number_of_variants_per_face: int = 9
     retargeting_do_crop: bool = flag(default=True, negative_prefix="--no-")
     retargeting_crop_scale: float = 2.3
     save_retargeted: bool = flag(default=False, negative_prefix="--no-")

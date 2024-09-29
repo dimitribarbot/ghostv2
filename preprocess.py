@@ -297,94 +297,100 @@ def process(
 
             cropped_face_path = os.path.join(output_dir, split_folder, base_filename)
             cropped_face_path_resized = os.path.join(output_dir_resized, split_folder, base_filename)
-            if not os.path.exists(cropped_face_path_resized):
-                os.makedirs(cropped_face_path, exist_ok=True)
-                os.makedirs(cropped_face_path_resized)
+            if os.path.exists(cropped_face_path_resized):
+                continue
 
-                df = pq.read_table(parquet_file).to_pandas()
-                df = df[df["status"] == "success"]
+            os.makedirs(cropped_face_path, exist_ok=True)
+            os.makedirs(cropped_face_path_resized)
 
-                dataset = (
-                    wds.WebDataset(f"{base_pathname}.tar", shardshuffle=False)
-                        .decode("rgb8")
-                        .to_tuple("jpg;png", "json")
-                        .map(preprocess_data)
-                )
+            df = pq.read_table(parquet_file).to_pandas()
+            df = df[df["status"] == "success"]
 
-                for image, id in tqdm(dataset, total=len(df), desc=f"images {base_filename}", leave=False):
-                    try:
-                        if not image.shape[0] > args.min_original_image_size or not image.shape[1] > args.min_original_image_size:
+            dataset = (
+                wds.WebDataset(f"{base_pathname}.tar", shardshuffle=False)
+                    .decode("rgb8")
+                    .to_tuple("jpg;png", "json")
+                    .map(preprocess_data)
+            )
+
+            for image, id in tqdm(dataset, total=len(df), desc=f"images {base_filename}", leave=False):
+                try:
+                    if not image.shape[0] > args.min_original_image_size or not image.shape[1] > args.min_original_image_size:
+                        continue
+
+                    faces = []
+                    landmarks, landmark_scores, detected_faces = face_alignment.get_landmarks_from_image(
+                        image,
+                        return_bboxes=True,
+                        return_landmark_score=True,
+                    )
+
+                    if landmarks is None or landmark_scores is None or detected_faces is None:
+                        continue
+
+                    for landmark, landmark_score, detected_face in zip(landmarks, landmark_scores, detected_faces):
+                        faces.append({
+                            "box": detected_face,
+                            "score": landmark_score,
+                            "kps": landmark
+                        })
+
+                    faces = filter_faces(faces, args.min_original_face_size)
+                    if len(faces) == 0:
+                        continue
+
+                    eye_and_lip_ratios = get_retargeted_image_ratios(
+                        live_portrait_pipeline,
+                        image,
+                        faces
+                    )
+
+                    retargeted_images = get_retargeted_images(
+                        live_portrait_pipeline,
+                        image,
+                        id,
+                        faces,
+                        eye_and_lip_ratios,
+                        args.number_of_variants_per_face,
+                        args.retargeting_do_crop,
+                        args.retargeting_crop_scale,
+                        args.save_retargeted,
+                        args.output_dir_retargeted
+                    )
+
+                    retargeted_images_faces = face_detector(retargeted_images, threshold=0.99, return_dict=True, cv=True)
+
+                    if not verify_retargeted_faces_have_same_length(retargeted_images_faces, args.min_original_face_size):
+                        continue
+
+                    for image_index, retargeted_image in enumerate(retargeted_images):
+                        retargeted_image_faces = filter_faces(
+                            retargeted_images_faces[image_index],
+                            args.min_original_face_size
+                        )
+
+                        if len(retargeted_image_faces) == 0:
                             continue
 
-                        faces = []
-                        landmarks, landmark_scores, detected_faces = face_alignment.get_landmarks_from_image(
-                            image,
-                            return_bboxes=True,
-                            return_landmark_score=True,
-                        )
-                        for landmark, landmark_score, detected_face in zip(landmarks, landmark_scores, detected_faces):
-                            faces.append({
-                                "box": detected_face,
-                                "score": landmark_score,
-                                "kps": landmark
-                            })
+                        retargeted_image_faces.sort(key=functools.cmp_to_key(get_face_sort_key))
+                        
+                        for retargeted_face_index, retargeted_face in enumerate(retargeted_image_faces):
+                            image_name = f'{id}_{retargeted_face_index:02d}'
 
-                        faces = filter_faces(faces, args.min_original_face_size)
-                        if len(faces) == 0:
-                            continue
-
-                        eye_and_lip_ratios = get_retargeted_image_ratios(
-                            live_portrait_pipeline,
-                            image,
-                            faces
-                        )
-
-                        retargeted_images = get_retargeted_images(
-                            live_portrait_pipeline,
-                            image,
-                            id,
-                            faces,
-                            eye_and_lip_ratios,
-                            args.number_of_variants_per_face,
-                            args.retargeting_do_crop,
-                            args.retargeting_crop_scale,
-                            args.save_retargeted,
-                            args.output_dir_retargeted
-                        )
-
-                        retargeted_images_faces = face_detector(retargeted_images, threshold=0.99, return_dict=True, cv=True)
-
-                        if not verify_retargeted_faces_have_same_length(retargeted_images_faces, args.min_original_face_size):
-                            continue
-
-                        for image_index, retargeted_image in enumerate(retargeted_images):
-                            retargeted_image_faces = filter_faces(
-                                retargeted_images_faces[image_index],
-                                args.min_original_face_size
+                            align_and_save(
+                                gfpgan,
+                                retargeted_image,
+                                retargeted_face["kps"],
+                                image_index,
+                                final_crop_size,
+                                cropped_face_path,
+                                cropped_face_path_resized,
+                                image_name,
+                                device
                             )
-
-                            if len(retargeted_image_faces) == 0:
-                                continue
-
-                            retargeted_image_faces.sort(key=functools.cmp_to_key(get_face_sort_key))
-                            
-                            for retargeted_face_index, retargeted_face in enumerate(retargeted_image_faces):
-                                image_name = f'{id}_{retargeted_face_index:02d}'
-
-                                align_and_save(
-                                    gfpgan,
-                                    retargeted_image,
-                                    retargeted_face["kps"],
-                                    image_index,
-                                    final_crop_size,
-                                    cropped_face_path,
-                                    cropped_face_path_resized,
-                                    image_name,
-                                    device
-                                )
-                    except Exception as ex:
-                        print(f"An error occurred for sample {id}: {ex}")
-                        traceback.print_tb(ex.__traceback__)
+                except Exception as ex:
+                    print(f"An error occurred for sample {id}: {ex}")
+                    traceback.print_tb(ex.__traceback__)
 
 
 def main(args: PreprocessArguments):
