@@ -143,10 +143,16 @@ class LivePortraitPipeline(object):
 
 
     @torch.no_grad()
-    def init_retargeting_image(self, input_image: cv2.typing.MatLike, original_lmk: np.ndarray, do_crop: bool):
+    def init_retargeting_image(
+        self,
+        input_image: cv2.typing.MatLike,
+        original_lmk: np.ndarray,
+        do_crop: bool, 
+        crop_scale=3.5,
+    ):
         img_rgb = load_img_online(input_image, mode='rgb', max_dim=1280, n=16)
         if do_crop:
-            crop_info = self.cropper.crop_source_image(img_rgb, original_lmk)
+            crop_info = self.cropper.crop_source_image(img_rgb, original_lmk, crop_scale)
             lmk = crop_info['lmk_crop']
         else:
             lmk = self.cropper.calc_lmk_from_cropped_image(img_rgb, original_lmk)
@@ -168,10 +174,11 @@ class LivePortraitPipeline(object):
         input_head_yaw_variation,
         input_head_roll_variation,
         do_crop: bool,
+        crop_scale=3.5,
     ):
         img_rgb = load_img_online(input_image, mode='rgb', max_dim=1280, n=2)
         if do_crop:
-            crop_info = self.cropper.crop_source_image(img_rgb, original_lmk)
+            crop_info = self.cropper.crop_source_image(img_rgb, original_lmk, crop_scale)
             I_s = self.wrapper.prepare_source(crop_info['img_crop_256x256'])
             source_lmk_user = crop_info['lmk_crop']
             crop_M_c2o = crop_info['M_c2o']

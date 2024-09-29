@@ -13,14 +13,14 @@ class Cropper(object):
         )
 
 
-    def crop_source_image(self, img_rgb: np.ndarray, original_lmk: np.ndarray):
+    def crop_source_image(self, img_rgb: np.ndarray, original_lmk: np.ndarray, crop_scale: float):
         cropped_img_rgb = img_rgb.copy()
 
         ret_dct = crop_image(
             cropped_img_rgb,
             original_lmk,
             dsize=512,
-            scale=3.5,
+            scale=crop_scale,
             vx_ratio=0,
             vy_ratio=-0.125,
             flag_do_rot=True,

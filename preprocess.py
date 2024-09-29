@@ -44,6 +44,8 @@ def get_retargeted_images(
         image: cv2.typing.MatLike,
         lmk: np.ndarray,
         number_of_variants_per_face: int,
+        do_crop: bool,
+        crop_scale: float,
         save_retargeted: bool,
         retargeted_path: str,
 ):
@@ -54,11 +56,13 @@ def get_retargeted_images(
         retargeted_image = cv2.cvtColor(image, cv2.COLOR_RGB2BGR)
         cv2.imwrite(os.path.join(retargeted_path, "0.jpg"), retargeted_image)
 
-    do_crop = True
-
     retargeted_images = []
 
-    source_eye_ratio, source_lip_ratio = live_portrait_pipeline.init_retargeting_image(image, lmk, do_crop=do_crop)
+    source_eye_ratio, source_lip_ratio = live_portrait_pipeline.init_retargeting_image(
+        image, lmk,
+        do_crop=do_crop,
+        crop_scale=crop_scale
+    )
     if source_eye_ratio is not None and source_lip_ratio is not None:
         for i in range(number_of_variants_per_face):
             _, retargeted_image = live_portrait_pipeline.execute_image_retargeting(
@@ -84,6 +88,7 @@ def get_retargeted_images(
                 eyeball_direction_x=round(random.uniform(-10, 10), 2),
                 eyeball_direction_y=round(random.uniform(-10, 10), 2),
                 do_crop=do_crop,
+                crop_scale=crop_scale,
             )
             if retargeted_image is not None:
                 if save_retargeted:
@@ -165,6 +170,8 @@ def process(
                                     image,
                                     np.array(lmk),
                                     args.number_of_variants_per_face,
+                                    args.retargeting_do_crop,
+                                    args.retargeting_crop_scale,
                                     args.save_retargeted,
                                     args.output_dir_retargeted
                                 )

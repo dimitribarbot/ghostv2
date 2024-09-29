@@ -30,5 +30,9 @@ class PreprocessArguments:
     """ Run arguments """
     device_id: int = 0
     final_crop_size: int = 224
+
+    """ Retargeting options """
     number_of_variants_per_face: int = 7
+    retargeting_do_crop: bool = flag(default=True, negative_prefix="--no-")
+    retargeting_crop_scale: float = 3.5
     save_retargeted: bool = flag(default=False, negative_prefix="--no-")
