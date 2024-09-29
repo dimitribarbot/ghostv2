@@ -18,7 +18,7 @@ import numpy as np
 
 from GFPGAN.gfpganv1_clean_arch import GFPGANv1Clean
 from LivePortrait.pipeline import LivePortraitPipeline
-from LivePortrait.utils.io import load_img_online
+from LivePortrait.utils.io import contiguous, resize_to_limit
 from RetinaFace.detector import RetinaFace
 from face_alignment import FaceAlignment, LandmarksType
 from utils.training.preprocess_arguments import PreprocessArguments
@@ -116,7 +116,7 @@ def get_retargeted_images(
     save_retargeted: bool,
     output_dir_retargeted: str,
 ):
-    bgr_image = load_img_online(image, mode="rgb", max_dim=1280, n=2)
+    bgr_image = contiguous(image[..., ::-1])
 
     retargeted_images = [bgr_image]
 
@@ -318,26 +318,28 @@ def process(
                     if not image.shape[0] > args.min_original_image_size or not image.shape[1] > args.min_original_image_size:
                         continue
 
-                    faces = []
-                    landmarks, landmark_scores, detected_faces = face_alignment.get_landmarks_from_image(
+                    image = resize_to_limit(image, max_dim=1280, division=2)
+
+                    detected_faces = face_detector(image, threshold=0.99, return_dict=True)
+                    detected_faces = filter_faces(detected_faces, args.min_original_face_size)
+                    if len(detected_faces) == 0:
+                        continue
+
+                    bboxes = [detected_face["box"] for detected_face in detected_faces]
+
+                    landmarks = face_alignment.get_landmarks_from_image(
                         image,
-                        return_bboxes=True,
-                        return_landmark_score=True,
+                        detected_faces=bboxes,
                     )
 
-                    if landmarks is None or landmark_scores is None or detected_faces is None:
+                    if landmarks is None or len(landmarks) == 0:
                         continue
 
-                    for landmark, landmark_score, detected_face in zip(landmarks, landmark_scores, detected_faces):
+                    faces = []
+                    for landmark in landmarks:
                         faces.append({
-                            "box": detected_face,
-                            "score": landmark_score,
                             "kps": landmark
                         })
-
-                    faces = filter_faces(faces, args.min_original_face_size)
-                    if len(faces) == 0:
-                        continue
 
                     eye_and_lip_ratios = get_retargeted_image_ratios(
                         live_portrait_pipeline,
