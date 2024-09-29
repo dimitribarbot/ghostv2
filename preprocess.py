@@ -1,6 +1,7 @@
 import os
 import cv2
 from tqdm import tqdm
+import functools
 import random
 from typing import cast, Dict, List, Tuple, Union
 import traceback
@@ -216,9 +217,14 @@ def is_face_size_ok(face: Dict[str, np.ndarray], min_original_face_size: int):
     return width >= min_original_face_size and height >= min_original_face_size
 
 
-def get_face_sort_key(face: Dict[str, np.ndarray]):
-    if face["box"] is None:
+def get_face_sort_key(face1: Dict[str, np.ndarray], face2: Dict[str, np.ndarray]):
+    if face1["box"] is None:
+        if face2["box"] is None:
+            return 0
         return -1
+    
+    if face2["box"] is None:
+        return 1
     
     # (x1, y1)
     #
@@ -226,23 +232,44 @@ def get_face_sort_key(face: Dict[str, np.ndarray]):
     #
     #                       (x2, y2)
 
-    x1 = face["box"][0]
-    y1 = face["box"][1]
+    x1_1 = face1["box"][0]
+    y1_1 = face1["box"][1]
+    x2_1 = face1["box"][2]
+    y2_1 = face1["box"][3]
+    cx_1 = (x1_1 + x2_1) / 2
+    cy_1 = (y1_1 + y2_1) / 2
 
-    x2 = face["box"][2]
-    y2 = face["box"][3]
+    x1_2 = face2["box"][0]
+    y1_2 = face2["box"][1]
+    x2_2 = face2["box"][2]
+    y2_2 = face2["box"][3]
+    cx_2 = (x1_2 + x2_2) / 2
+    cy_2 = (y1_2 + y2_2) / 2
+
+    d1 = cx_1 * cx_1 + cy_1 * cy_1
+    d2 = cx_2 * cx_2 + cy_2 * cy_2
+
+    if d1 < d2:
+        return -1
     
-    cx = (x1 + x2) / 2
-    cy = (y1 + y2) / 2
+    if d1 > d2:
+        return 1
 
-    return [cy, cx]
+    return 0
 
 
-def filter_and_sort_faces(faces: List[Dict[str, np.ndarray]], min_original_face_size: int):
-    return sorted(
-        filter(lambda face: is_face_size_ok(face, min_original_face_size), faces),
-        key=get_face_sort_key
-    )
+def filter_faces(faces: List[Dict[str, np.ndarray]], min_original_face_size: int):
+    return filter(lambda face: is_face_size_ok(face, min_original_face_size), faces)
+
+
+def sort_retargeted_faces(faces: List[Dict[str, np.ndarray]]):
+    return sorted(faces, key=functools.cmp_to_key(get_face_sort_key))
+
+
+def verify_retargeted_faces_have_same_length(all_faces: List[List[Dict[str, np.ndarray]]]):
+    it = iter(all_faces)
+    length = len(next(it))
+    return all(len(l) == length for l in it)
 
 
 def process(
@@ -287,8 +314,11 @@ def process(
 
                 for image, id in tqdm(dataset, total=len(df), desc=f"images {base_filename}", leave=False):
                     try:
+                        if not image.shape[0] > args.min_original_image_size or not image.shape[1] > args.min_original_image_size:
+                            continue
+
                         faces = face_detector(image, threshold=0.99, return_dict=True)
-                        faces = filter_and_sort_faces(faces, args.min_original_face_size)
+                        faces = filter_faces(faces, args.min_original_face_size)
 
                         eye_and_lip_ratios = get_retargeted_image_ratios(
                             live_portrait_pipeline,
@@ -312,11 +342,14 @@ def process(
                         retargeted_images_faces = face_detector(retargeted_images, threshold=0.99, return_dict=True, cv=True)
 
                         for image_index, retargeted_image in enumerate(retargeted_images):
-                            retargeted_image_faces = filter_and_sort_faces(
+                            if not verify_retargeted_faces_have_same_length(retargeted_images_faces[image_index]):
+                                continue
+
+                            retargeted_image_faces = sort_retargeted_faces(
                                 retargeted_images_faces[image_index],
                                 args.min_original_face_size
                             )
-
+                            
                             for retargeted_face_index, retargeted_face in enumerate(retargeted_image_faces):
                                 image_name = f'{id}_{retargeted_face_index:02d}'
 
