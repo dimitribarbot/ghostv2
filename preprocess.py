@@ -3,6 +3,7 @@ import cv2
 from tqdm import tqdm
 import random
 from typing import cast, Dict, List, Tuple, Union
+import traceback
 
 from simple_parsing import ArgumentParser
 
@@ -332,7 +333,7 @@ def process(
                                 )
                     except Exception as ex:
                         print(f"An error occurred for sample {id}: {ex}")
-                        raise ex
+                        traceback.print_tb(ex.__traceback__)
 
 
 def main(args: PreprocessArguments):

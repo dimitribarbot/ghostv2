@@ -29,7 +29,7 @@ class PreprocessArguments:
 
     """ Run arguments """
     device_id: int = 0
-    min_original_face_size = 50
+    min_original_face_size = 64
     final_crop_size: int = 224
 
     """ Retargeting options """
