@@ -10,11 +10,11 @@ class TrainingArguments:
     run_name: str                                                           # Name of this run. Used to create folders where to save the weights.
 
     """ Dataset params """
-    dataset_path: str = "/VggFace2-crop/"                                   # Path to the dataset. If not VGG2 dataset is used, param --vgg should be set False
+    dataset_path: str = "/LaionFace-crop/"                                  # Path to the dataset. If not LAION dataset is used, param --laion should be set False
     ckpt_path: Optional[str] = None                                         # Path to checkpoint to resume training.
     G_path: str = "./weights/G.safetensors"                                 # Path to pretrained weights for G. Only used if pretrained=True
     D_path: str = "./weights/D.safetensors"                                 # Path to pretrained weights for D. Only used if pretrained=True
-    vgg: bool = flag(default=True, negative_prefix="--no-")                 # When using VGG2 dataset (or any other dataset with several photos for one identity)
+    laion: bool = flag(default=True, negative_prefix="--no-")               # When using LAION dataset (or any other dataset with several photos for one identity)
 
     """ Weights for loss """
     weight_adv: float = 1                                                   # Adversarial Loss weight
@@ -27,7 +27,7 @@ class TrainingArguments:
     backbone: str = choice("unet", "linknet", "resnet", default="unet")     # Backbone for attribute encoder
     num_blocks: int = 2                                                     # Numbers of AddBlocks at AddResblock
     same_person: float = 0.2                                                # Probability of using same person identity during training
-    same_identity: bool = flag(default=True, negative_prefix="--no-")       # Using simswap approach, when source_id = target_id. Only possible with vgg=True
+    same_identity: bool = flag(default=True, negative_prefix="--no-")       # Using simswap approach, when source_id = target_id. Only possible with laion=True
     diff_eq_same: bool = flag(default=False, negative_prefix="--no-")       # Don't use info about where is different identities
     pretrained: bool = flag(default=True, negative_prefix="--no-")          # If using the pretrained weights for training or not
     discr_force: bool = flag(default=False, negative_prefix="--no-")        # If True Discriminator would not train when adversarial loss is high

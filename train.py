@@ -23,7 +23,7 @@ from network.AEI_Net import *
 from network.MultiscaleDiscriminator import *
 from AdaptiveWingLoss.core import models
 from utils.training.training_arguments import TrainingArguments
-from utils.training.Dataset import FaceEmbedVGG2, FaceEmbed
+from utils.training.Dataset import FaceEmbedLaion, FaceEmbed
 from utils.training.image_processing import make_image_list, get_faceswap
 from utils.training.losses import compute_discriminator_loss, compute_generator_losses
 from utils.training.detector import detect_landmarks, paint_eyes
@@ -41,7 +41,7 @@ class GhostV2DataModule(L.LightningDataModule):
         self,
         dataset_path: str,
         same_person=0.2,
-        vgg=True,
+        laion=True,
         same_identity=True,
         batch_size=16,
         shuffle=True,
@@ -52,7 +52,7 @@ class GhostV2DataModule(L.LightningDataModule):
         super().__init__()
         self.dataset_path = dataset_path
         self.same_person = same_person
-        self.vgg = vgg
+        self.laion = laion
         self.same_identity = same_identity
         self.batch_size = batch_size
         self.shuffle = shuffle
@@ -62,10 +62,10 @@ class GhostV2DataModule(L.LightningDataModule):
 
 
     def setup(self, stage=None):
-        if self.vgg:
-            self.dataset = FaceEmbedVGG2(self.dataset_path, same_prob=self.same_person, same_identity=self.same_identity)
+        if self.laion:
+            self.dataset = FaceEmbedLaion(self.dataset_path, same_prob=self.same_person, same_identity=self.same_identity)
         else:
-            self.dataset = FaceEmbed([self.dataset_path], same_prob=self.same_person)
+            self.dataset = FaceEmbed(self.dataset_path, same_prob=self.same_person)
 
 
     def train_dataloader(self):
@@ -321,7 +321,7 @@ def main(args: TrainingArguments):
             "weight_rec": args.weight_rec,
             "weight_eyes": args.weight_eyes,
             "same_person": args.same_person,
-            "vgg_to_face": args.vgg,
+            "laion_faces": args.laion,
             "same_identity": args.same_identity,
             "diff_eq_same": args.diff_eq_same,
             "discr_force": args.discr_force,
@@ -355,7 +355,7 @@ def main(args: TrainingArguments):
     dm = GhostV2DataModule(
         args.dataset_path,
         same_person=args.same_person,
-        vgg=args.vgg,
+        laion=args.laion,
         same_identity=args.same_identity,
         batch_size=args.batch_size,
     )
@@ -373,8 +373,8 @@ if __name__ == "__main__":
     parser.add_arguments(TrainingArguments, dest="arguments")  # add arguments for the dataclass
     args = cast(TrainingArguments, parser.parse_args().arguments)
     
-    if args.vgg==False and args.same_identity==True:
-        raise ValueError("Sorry, you can't use some other dataset than VGG2 Faces with param same_identity=True")
+    if args.laion==False and args.same_identity==True:
+        raise ValueError("Sorry, you can't use some other dataset than LAION Faces with param same_identity=True")
     
     if not os.path.exists("./experiments/images"):
         os.makedirs("./experiments/images")

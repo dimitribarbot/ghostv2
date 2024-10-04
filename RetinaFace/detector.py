@@ -1,4 +1,4 @@
-import os
+# Code adapted from https://github.com/elliottzheng/batch-face/blob/master/batch_face/face_detection/detector.py
 
 import numpy as np
 import torch
