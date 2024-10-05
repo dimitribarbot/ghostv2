@@ -1,12 +1,14 @@
-from torch.utils.data import TensorDataset
-import torchvision.transforms as transforms
-from PIL import Image
 import glob
 import random
-import cv2
 from itertools import groupby
-from os.path import dirname
+
+from torch.utils.data import TensorDataset
+import torchvision.transforms as transforms
+
+from PIL import Image
+import cv2
 from tqdm import tqdm
+
 import sys
 sys.path.append('..')
 
@@ -69,12 +71,9 @@ class FaceEmbedLaion(FaceEmbed):
         super().__init__(data_path, same_prob)
 
         self.same_identity = same_identity
-        
-        folder_groups = groupby(self.images_list, key=dirname)
-        folder_len = len(folder_groups)
 
         self.folder2imgs = {}
-        for k, g in tqdm(folder_groups, total=folder_len):
+        for k, g in tqdm(groupby(self.images_list, key=get_image_folder_name)):
             self.folder2imgs[k] = list(g)
 
     def __getitem__(self, item: int):
