@@ -94,33 +94,26 @@ class GhostV2Module(L.LightningModule):
         self.G.train()
         self.D.train()
 
-        self.register_buffer("loss_adv_accumulated", torch.tensor(20.))
-
-
-    def setup(self, stage=None):
         if self.args.pretrained:
             try:
                 self.G.load_state_dict(load_file(self.args.G_path), strict=False)
                 self.D.load_state_dict(load_file(self.args.D_path), strict=False)
-                self.G.to(self.device)
-                self.D.to(self.device)
                 print("Loaded pretrained weights for G and D")
-            except FileNotFoundError as e:
+            except FileNotFoundError:
                 print("Not found pretrained weights. Continue without any pretrained weights.")
 
         self.facenet = InceptionResnetV1()
         self.facenet.load_state_dict(load_file("./weights/Facenet/facenet_pytorch.safetensors"))
-        self.facenet = self.facenet.to(self.device)
         self.facenet.eval()
 
         if self.args.eye_detector_loss:
             self.model_ft = models.FAN(4, False, False, 98)
             self.model_ft.load_state_dict(load_file("./weights/AdaptiveWingLoss/WFLW_4HG.safetensors"))
-            self.model_ft = self.model_ft.to(self.device)
-            self.model_ft = cast(models.FAN, torch.compile(self.model_ft))
             self.model_ft.eval()
         else:
             self.model_ft=None
+
+        self.register_buffer("loss_adv_accumulated", torch.tensor(20.))
 
     
     def training_step(self, batch):
