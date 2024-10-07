@@ -1,8 +1,12 @@
+import os
 from dataclasses import dataclass
 from typing import Optional
 
 from simple_parsing import choice
 from simple_parsing.helpers import flag
+
+def make_real_path(relative_path):
+    return os.path.join(os.path.dirname(os.path.realpath(__file__)), "../..", relative_path)
 
 @dataclass
 class TrainingArguments:
@@ -10,10 +14,10 @@ class TrainingArguments:
     run_name: str                                                           # Name of this run. Used to create folders where to save the weights.
 
     """ Dataset params """
-    dataset_path: str = "/LaionFace-crop/"                                  # Path to the dataset. If not LAION dataset is used, param --laion should be set False
+    dataset_path: str = make_real_path("./LaionFace-crop/")                 # Path to the dataset. If not LAION dataset is used, param --laion should be set False
     ckpt_path: Optional[str] = None                                         # Path to checkpoint to resume training.
-    G_path: str = "./weights/G.safetensors"                                 # Path to pretrained weights for G. Only used if pretrained=True
-    D_path: str = "./weights/D.safetensors"                                 # Path to pretrained weights for D. Only used if pretrained=True
+    G_path: str = make_real_path("./weights/G.safetensors")                 # Path to pretrained weights for G. Only used if pretrained=True
+    D_path: str = make_real_path("./weights/D.safetensors")                 # Path to pretrained weights for D. Only used if pretrained=True
     laion: bool = flag(default=True, negative_prefix="--no-")               # When using LAION dataset (or any other dataset with several photos for one identity)
 
     """ Weights for loss """
