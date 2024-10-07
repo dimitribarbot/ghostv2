@@ -1,6 +1,7 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+
 from AdaptiveWingLoss.core.coord_conv import CoordConvTh
 
 
@@ -132,7 +133,7 @@ class HourGlass(nn.Module):
         low3 = low2
         low3 = self._modules['b3_' + str(level)](low3)
 
-        up2 = F.upsample(low3, scale_factor=2, mode='nearest')
+        up2 = F.interpolate(low3, scale_factor=2, mode='nearest')
 
         return up1 + up2
 

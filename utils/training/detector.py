@@ -2,7 +2,6 @@ import torch
 import cv2
 from PIL import Image
 import torchvision.transforms as transforms
-from AdaptiveWingLoss.utils.utils import get_preds_fromhm
 from .image_processing import torch2image
 
 
@@ -14,17 +13,41 @@ transforms_base = transforms.Compose([
         ])
 
 
-def detect_landmarks(inputs, model_ft):
-    mean = torch.tensor([0.5, 0.5, 0.5]).unsqueeze(1).unsqueeze(2).to(inputs.device)
-    std = torch.tensor([0.5, 0.5, 0.5]).unsqueeze(1).unsqueeze(2).to(inputs.device)
+def get_preds_fromhm(hm: torch.Tensor):
+    _, idx = torch.max(
+        hm.view(hm.size(0), hm.size(1), hm.size(2) * hm.size(3)), 2)
+    idx += 1
+    preds = idx.view(idx.size(0), idx.size(1), 1).repeat(1, 1, 2).float()
+    preds[..., 0].apply_(lambda x: (x - 1) % hm.size(3) + 1)
+    preds[..., 1].add_(-1).div_(hm.size(2)).floor_().add_(1)
+    
+    
+    for i in range(preds.size(0)):
+        for j in range(preds.size(1)):
+            hm_ = hm[i, j, :]
+            pX, pY = int(preds[i, j, 0]) - 1, int(preds[i, j, 1]) - 1
+            if pX > 0 and pX < 63 and pY > 0 and pY < 63:
+                diff = torch.FloatTensor(
+                    [hm_[pY, pX + 1] - hm_[pY, pX - 1],
+                     hm_[pY + 1, pX] - hm_[pY - 1, pX]])
+                preds[i, j].add_(diff.sign_().mul_(.25))
+
+    preds.add_(-0.5)
+
+    return preds
+
+
+def detect_landmarks(inputs: torch.Tensor, model_ft):
+    mean = torch.tensor([0.5, 0.5, 0.5], device=inputs.device).unsqueeze(1).unsqueeze(2)
+    std = torch.tensor([0.5, 0.5, 0.5], device=inputs.device).unsqueeze(1).unsqueeze(2)
     inputs = (std * inputs) + mean
 
-    outputs, boundary_channels = model_ft(inputs)    
-    pred_heatmap = outputs[-1][:, :-1, :, :].cpu() 
-    pred_landmarks, _ = get_preds_fromhm(pred_heatmap)
-    landmarks = pred_landmarks*4.0
-    eyes = torch.cat((landmarks[:,96,:], landmarks[:,97,:]), 1)
-    return eyes, pred_heatmap[:,96,:,:], pred_heatmap[:,97,:,:]
+    outputs, _ = model_ft(inputs)
+    pred_heatmap = outputs[-1][:, :-1, :, :]
+    pred_landmarks, _ = get_preds_fromhm(pred_heatmap.cpu()).to(inputs.device)
+    landmarks = pred_landmarks * 4.0
+    eyes = torch.cat((landmarks[:, 96, :], landmarks[:, 97, :]), 1)
+    return eyes, pred_heatmap[:, 96, :, :], pred_heatmap[:, 97, :, :]
 
 
 def paint_eyes(images, eyes):

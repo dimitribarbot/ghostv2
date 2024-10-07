@@ -3,7 +3,6 @@ from dataclasses import dataclass
 from typing import Optional
 
 from simple_parsing import choice
-from simple_parsing.helpers import flag
 
 def make_real_path(relative_path):
     return os.path.join(os.path.dirname(os.path.realpath(__file__)), "../..", relative_path)

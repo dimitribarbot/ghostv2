@@ -27,12 +27,13 @@ class GhostV2Module(L.LightningModule):
         super().__init__()
         self.G_path = args.G_path
         self.G = AEI_Net(args.backbone, num_blocks=args.num_blocks, c_id=512)
-        self.G = cast(AEI_Net, torch.compile(self.G))
 
 
     def setup(self, stage=None):
         try:
-            self.G.load_state_dict(load_file(self.G_path), strict=False)
+            checkpoint = load_file(self.G_path)
+            checkpoint = { k.replace("_orig_mod.", ""): v for k,v in checkpoint.items() }
+            self.G.load_state_dict(checkpoint, strict=False)
             self.G = self.G.to(self.device)
             self.G.eval()
             print("Loaded pretrained weights for G")

@@ -100,8 +100,10 @@ class GhostV2Module(L.LightningModule):
     def setup(self, stage=None):
         if self.args.pretrained:
             try:
-                self.G.load_state_dict(load_file(self.args.G_path, device=self.device), strict=False)
-                self.D.load_state_dict(load_file(self.args.D_path, device=self.device), strict=False)
+                self.G.load_state_dict(load_file(self.args.G_path), strict=False)
+                self.D.load_state_dict(load_file(self.args.D_path), strict=False)
+                self.G.to(self.device)
+                self.D.to(self.device)
                 print("Loaded pretrained weights for G and D")
             except FileNotFoundError as e:
                 print("Not found pretrained weights. Continue without any pretrained weights.")
@@ -112,18 +114,10 @@ class GhostV2Module(L.LightningModule):
         self.facenet.eval()
 
         if self.args.eye_detector_loss:
-            self.model_ft = models.FAN(4, "False", "False", 98)
-            checkpoint = load_file("./weights/AdaptiveWingLoss/WFLW_4HG.safetensors")
-            if "state_dict" not in checkpoint:
-                self.model_ft.load_state_dict(checkpoint)
-            else:
-                pretrained_weights = checkpoint["state_dict"]
-                model_weights = self.model_ft.state_dict()
-                pretrained_weights = {k: v for k, v in pretrained_weights.items() \
-                                    if k in model_weights}
-                model_weights.update(pretrained_weights)
-                self.model_ft.load_state_dict(model_weights)
+            self.model_ft = models.FAN(4, False, False, 98)
+            self.model_ft.load_state_dict(load_file("./weights/AdaptiveWingLoss/WFLW_4HG.safetensors"))
             self.model_ft = self.model_ft.to(self.device)
+            self.model_ft = cast(models.FAN, torch.compile(self.model_ft))
             self.model_ft.eval()
         else:
             self.model_ft=None
@@ -272,7 +266,7 @@ class GhostV2LoggingCallback(L.Callback):
 
 class GhostV2CheckpointCallback(L.Callback):
     def on_train_batch_end(self, trainer, pl_module: GhostV2Module, outputs, batch, batch_idx):
-        if batch_idx > 0 and batch_idx % 25000 == 0:
+        if (trainer.current_epoch > 0 or batch_idx > 0) and batch_idx % 25000 == 0:
             save_file(pl_module.G.state_dict(), f"./experiments/saved_models_{pl_module.args.run_name}/G_latest.safetensors")
             save_file(pl_module.D.state_dict(), f"./experiments/saved_models_{pl_module.args.run_name}/D_latest.safetensors")
 

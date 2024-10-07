@@ -1,6 +1,7 @@
 import torch
 
-l1_loss = torch.nn.L1Loss()
+from utils.training.training_arguments import TrainingArguments
+
 l2_loss = torch.nn.MSELoss()
 
 
@@ -11,7 +12,7 @@ def hinge_loss(X, positive):
     
     
 def compute_generator_losses(G, Y, Xt, Xt_attr, Di, embed, ZY, eye_heatmaps, loss_adv_accumulated, 
-                             diff_person, same_person, args):
+                             diff_person, same_person, args: TrainingArguments):
     # adversarial loss
     L_adv = 0.
     for di in Di:
