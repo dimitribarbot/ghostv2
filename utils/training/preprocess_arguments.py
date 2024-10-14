@@ -13,12 +13,12 @@ class PreprocessArguments:
     """ Data arguments """
     laion_face_base_dir: str = "/home/dimitribarbot/datasets/LAION-Face"
     laion_face_part_indices: List[int] = list_field(default=[0])
-    output_dir: str = "/home/dimitribarbot/datasets/LAION-Face/laion_face_cropped_512x512"
-    output_dir_resized: str = "/home/dimitribarbot/datasets/LAION-Face/laion_face_cropped_224x224"
-    output_dir_retargeted: str = "/home/dimitribarbot/datasets/LAION-Face/laion_face_retargeted_data"
+    output_dir: str = "/home/dimitribarbot/datasets/LAION-Face/laion_face_cropped_512x512_v2"
+    output_dir_resized: str = "/home/dimitribarbot/datasets/LAION-Face/laion_face_cropped_224x224_v2"
+    output_dir_retargeted: str = "/home/dimitribarbot/datasets/LAION-Face/laion_face_retargeted_data_v2"
 
     """ Model arguments """
-    gfpgan_model_path: str = make_real_path("./weights/GFPGAN/GFPGANv1.4.safetensors")
+    gfpgan_model_path: str = make_real_path("./weights/GFPGAN/GFPGANCleanv1-NoCE-C2.safetensors")
     retina_face_model_path: str = make_real_path("./weights/RetinaFace/Resnet50_Final.safetensors")
     face_alignment_model_path: str = make_real_path("./weights/FaceAlignment/s3fd-619a316812.safetensors")
     live_portrait_landmark_model_path: str = make_real_path("./weights/LivePortrait/landmark_model.pth")
@@ -38,4 +38,5 @@ class PreprocessArguments:
     number_of_variants_per_face: int = 9
     retargeting_do_crop: bool = flag(default=True, negative_prefix="--no-")
     retargeting_crop_scale: float = 2.3
+    save_full_size: bool = flag(default=False, negative_prefix="--no-")
     save_retargeted: bool = flag(default=False, negative_prefix="--no-")

@@ -6,7 +6,7 @@ from simple_parsing import ArgumentParser
 
 from RetinaFace.detector import RetinaFace
 from utils.training.example_arguments import ExampleArguments
-from utils.training.image_processing import align_warp_face
+from utils.image_processing import align_warp_face
 
 
 def process_one_image(

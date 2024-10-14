@@ -24,7 +24,7 @@ from network.MultiscaleDiscriminator import *
 from AdaptiveWingLoss.core import models
 from utils.training.training_arguments import TrainingArguments
 from utils.training.Dataset import FaceEmbedLaion, FaceEmbed
-from utils.training.image_processing import make_image_list, get_faceswap
+from utils.image_processing import make_image_list, get_faceswap
 from utils.training.losses import compute_discriminator_loss, compute_generator_losses
 from utils.training.detector import detect_landmarks, paint_eyes
 from facenet.inception_resnet_v1 import InceptionResnetV1
@@ -190,8 +190,16 @@ class GhostV2Module(L.LightningModule):
         opt_D = optim.Adam(self.D.parameters(), lr=self.args.lr_D, betas=(self.args.b1_D, self.args.b2_D), weight_decay=self.args.wd_D)
 
         if self.args.use_scheduler:
-            scheduler_G = scheduler.StepLR(opt_G, step_size=self.args.scheduler_step, gamma=self.args.scheduler_gamma)
-            scheduler_D = scheduler.StepLR(opt_D, step_size=self.args.scheduler_step, gamma=self.args.scheduler_gamma)
+            if self.args.scheduler_type == "one_cycle":
+                total_steps = self.trainer.estimated_stepping_batches if self.args.scheduler_total_steps == -1 else self.args.scheduler_total_steps
+                print(f"Using OneCycleLR scheduler with max_lr_G={self.args.lr_G} and total_steps={total_steps} for G.")
+                scheduler_G = scheduler.OneCycleLR(opt_G, max_lr=self.args.lr_G, total_steps=total_steps)
+                print(f"Using OneCycleLR scheduler with max_lr_D={self.args.lr_D} and total_steps={total_steps} for D.")
+                scheduler_D = scheduler.OneCycleLR(opt_D, max_lr=self.args.lr_D, total_steps=total_steps)
+            else:
+                print(f"Using StepLR scheduler with step_size={self.args.scheduler_step} and gamma={self.args.scheduler_gamma} for G and D.")
+                scheduler_G = scheduler.StepLR(opt_G, step_size=self.args.scheduler_step, gamma=self.args.scheduler_gamma)
+                scheduler_D = scheduler.StepLR(opt_D, step_size=self.args.scheduler_step, gamma=self.args.scheduler_gamma)
             return [opt_G, opt_D], [scheduler_G, scheduler_D]
 
         return [opt_G, opt_D], []

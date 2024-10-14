@@ -17,12 +17,12 @@ from torchvision.transforms.functional import normalize
 import numpy as np
 
 from GFPGAN.gfpganv1_clean_arch import GFPGANv1Clean
-from LivePortrait.pipeline import LivePortraitPipeline
+from LivePortrait.pipeline import LivePortraitPipeline, RetargetingParameters
 from LivePortrait.utils.io import contiguous, resize_to_limit
 from RetinaFace.detector import RetinaFace
 from face_alignment import FaceAlignment, LandmarksType
 from utils.training.preprocess_arguments import PreprocessArguments
-from utils.training.image_processing import align_warp_face, img2tensor, tensor2img
+from utils.image_processing import align_warp_face, img2tensor, tensor2img
 
 
 @torch.no_grad()
@@ -43,52 +43,12 @@ def enhance(gfpgan: GFPGANv1Clean, img: cv2.typing.MatLike, image_name: str, dev
     return restored_face
 
 
-def get_retargeted_image(
-    live_portrait_pipeline: LivePortraitPipeline,
-    image: cv2.typing.MatLike,
-    lmk: np.ndarray,
-    source_eye_ratio: float,
-    source_lip_ratio: float,
-    do_crop: bool,
-    crop_scale: float,
-):
-    if source_eye_ratio is not None and source_lip_ratio is not None:
-        _, retargeted_image = live_portrait_pipeline.execute_image_retargeting(
-            image,
-            lmk,
-            source_eye_ratio,
-            source_lip_ratio,
-            input_eye_ratio=round(random.uniform(0.34, 0.42), 2),
-            input_lip_ratio=round(random.uniform(0, 0.3), 2),
-            input_head_pitch_variation=round(random.uniform(-8, 8), 0),
-            input_head_yaw_variation=round(random.uniform(-15, 15), 0),
-            input_head_roll_variation=round(random.uniform(-8, 8), 0),
-            mov_x=0,
-            mov_y=0,
-            mov_z=1,
-            lip_variation_zero=round(random.uniform(-0.01, 0.01), 2),
-            lip_variation_one=round(random.uniform(-10, 10), 2),
-            lip_variation_two=round(random.uniform(0, 5), 2),
-            lip_variation_three=round(random.uniform(-10, 20), 0),
-            smile=round(random.uniform(-0.2, 0.6), 2),
-            wink=round(random.uniform(0, 10), 2),
-            eyebrow=round(random.uniform(-7.5, 7.5), 2),
-            eyeball_direction_x=round(random.uniform(-10, 10), 2),
-            eyeball_direction_y=round(random.uniform(-10, 10), 2),
-            do_crop=do_crop,
-            crop_scale=crop_scale,
-        )
-
-        return retargeted_image if retargeted_image is not None else image
-
-    return image
-
-
-def get_retargeted_image_ratios(
+def get_retargeted_image_ratios_and_landmarks(
     live_portrait_pipeline: LivePortraitPipeline,
     image: cv2.typing.MatLike,
     faces: List[Dict[str, np.ndarray]]
 ):
+    landmarks: List[np.ndarray] = []
     eye_and_lip_ratios: List[Union[Tuple[None, None] | Tuple[float, float]]] = []
 
     for face_index in range(len(faces)):
@@ -99,9 +59,38 @@ def get_retargeted_image_ratios(
             do_crop=args.retargeting_do_crop,
             crop_scale=args.retargeting_crop_scale
         )
+        landmarks.append(lmk)
         eye_and_lip_ratios.append(ratios)
 
-    return eye_and_lip_ratios
+    return landmarks, eye_and_lip_ratios
+
+
+def get_all_face_retargeting_parameters(faces: List[Dict[str, np.ndarray]], number_of_variants_per_face: int):
+    all_parameters: List[List[RetargetingParameters]] = []
+    for _ in range(len(faces)):
+        parameters: List[RetargetingParameters] = []
+        for _ in range(number_of_variants_per_face):
+            parameters.append(RetargetingParameters(
+                input_eye_ratio=round(random.uniform(0.34, 0.42), 2),
+                input_lip_ratio=round(random.uniform(0, 0.3), 2),
+                input_head_pitch_variation=round(random.uniform(-8, 8), 0),
+                input_head_yaw_variation=round(random.uniform(-15, 15), 0),
+                input_head_roll_variation=round(random.uniform(-8, 8), 0),
+                mov_x=0,
+                mov_y=0,
+                mov_z=1,
+                lip_variation_zero=round(random.uniform(-0.01, 0.01), 2),
+                lip_variation_one=round(random.uniform(-10, 10), 2),
+                lip_variation_two=round(random.uniform(0, 5), 2),
+                lip_variation_three=round(random.uniform(-10, 20), 0),
+                smile=round(random.uniform(-0.2, 0.6), 2),
+                wink=round(random.uniform(0, 10), 2),
+                eyebrow=round(random.uniform(-7.5, 7.5), 2),
+                eyeball_direction_x=round(random.uniform(-10, 10), 2),
+                eyeball_direction_y=round(random.uniform(-10, 10), 2),
+            ))
+        all_parameters.append(parameters)
+    return all_parameters
 
 
 def get_retargeted_images(
@@ -109,7 +98,6 @@ def get_retargeted_images(
     image: cv2.typing.MatLike,
     image_id: int,
     faces: List[Dict[str, np.ndarray]],
-    eye_and_lip_ratios: List[Union[Tuple[None, None] | Tuple[float, float]]],
     number_of_variants_per_face: int,
     do_crop: bool,
     crop_scale: float,
@@ -127,29 +115,37 @@ def get_retargeted_images(
             bgr_image
         )
 
-    for i in range(number_of_variants_per_face):
-        retargeted_image = bgr_image.copy()
+    landmarks, eye_and_lip_ratios = get_retargeted_image_ratios_and_landmarks(
+        live_portrait_pipeline,
+        image,
+        faces
+    )
 
-        for face_index in range(len(faces)):
-            lmk = np.array(faces[face_index]["kps"])
-            retargeted_image = get_retargeted_image(
-                live_portrait_pipeline,
-                retargeted_image,
-                lmk,
-                eye_and_lip_ratios[face_index][0],
-                eye_and_lip_ratios[face_index][1],
-                do_crop,
-                crop_scale
-            )
-            retargeted_image = cv2.cvtColor(retargeted_image, cv2.COLOR_RGB2BGR)
-    
+    all_parameters: List[List[RetargetingParameters]] = get_all_face_retargeting_parameters(
+        faces,
+        number_of_variants_per_face
+    )
+
+    retargeted_image_variations = live_portrait_pipeline.execute_image_retargeting_multi(
+        bgr_image.copy(),
+        landmarks,
+        eye_and_lip_ratios,
+        all_parameters,
+        do_crop,
+        crop_scale,
+    )
+
+    if retargeted_image_variations is not None:
+        retargeted_image_variations = [cv2.cvtColor(variation, cv2.COLOR_RGB2BGR) for variation in retargeted_image_variations if variation is not None]
+
         if save_retargeted:
-            cv2.imwrite(
-                os.path.join(output_dir_retargeted, f"{image_id}", f"{i + 1}.jpg"),
-                retargeted_image
-            )
+            for i in range(len(retargeted_image_variations)):
+                cv2.imwrite(
+                    os.path.join(output_dir_retargeted, f"{image_id}", f"{i + 1}.jpg"),
+                    retargeted_image_variations[i]
+                )
 
-        retargeted_images.append(retargeted_image)
+        retargeted_images += retargeted_image_variations
     
     return retargeted_images
 
@@ -163,16 +159,19 @@ def align_and_save(
     cropped_face_path:str,
     cropped_face_path_resized: str,
     image_name: str,
-    device: str
+    device: str,
+    save_full_size: bool
 ):
-    save_path = os.path.join(cropped_face_path, image_name)
+    if save_full_size:
+        save_path = os.path.join(cropped_face_path, image_name)
+        os.makedirs(save_path, exist_ok=True)
     save_path_resized = os.path.join(cropped_face_path_resized, image_name)
-    os.makedirs(save_path, exist_ok=True)
     os.makedirs(save_path_resized, exist_ok=True)
     
     cropped_face = align_warp_face(image, lmk)
     cropped_face = enhance(gfpgan, cropped_face, image_name, device)
-    cv2.imwrite(os.path.join(save_path, f"{image_index}.jpg"), cropped_face)
+    if save_full_size:
+        cv2.imwrite(os.path.join(save_path, f"{image_index}.jpg"), cropped_face)
     cropped_face = cv2.resize(cropped_face, final_crop_size)
     cv2.imwrite(os.path.join(save_path_resized, f"{image_index}.jpg"), cropped_face)
 
@@ -300,9 +299,6 @@ def process(
             if os.path.exists(cropped_face_path_resized):
                 continue
 
-            os.makedirs(cropped_face_path, exist_ok=True)
-            os.makedirs(cropped_face_path_resized)
-
             df = pq.read_table(parquet_file).to_pandas()
             df = df[df["status"] == "success"]
 
@@ -341,18 +337,11 @@ def process(
                             "kps": landmark
                         })
 
-                    eye_and_lip_ratios = get_retargeted_image_ratios(
-                        live_portrait_pipeline,
-                        image,
-                        faces
-                    )
-
                     retargeted_images = get_retargeted_images(
                         live_portrait_pipeline,
                         image,
                         id,
                         faces,
-                        eye_and_lip_ratios,
                         args.number_of_variants_per_face,
                         args.retargeting_do_crop,
                         args.retargeting_crop_scale,
@@ -388,7 +377,8 @@ def process(
                                 cropped_face_path,
                                 cropped_face_path_resized,
                                 image_name,
-                                device
+                                device,
+                                args.save_full_size
                             )
                 except Exception as ex:
                     print(f"An error occurred for sample {id}: {ex}")

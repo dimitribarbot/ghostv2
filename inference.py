@@ -12,7 +12,7 @@ import lightning as L
 from network.AEI_Net import *
 from network.MultiscaleDiscriminator import *
 from utils.inference.inference_arguments import InferenceArguments
-from utils.training.image_processing import get_faceswap
+from utils.image_processing import get_faceswap
 from facenet.inception_resnet_v1 import InceptionResnetV1
 
 print("finished imports")

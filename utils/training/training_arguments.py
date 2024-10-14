@@ -23,7 +23,7 @@ class TrainingArguments:
     """ Weights for loss """
     weight_adv: float = 1                                                   # Adversarial Loss weight
     weight_attr: float = 10                                                 # Attributes weight
-    weight_id: float = 15                                                   # Identity Loss weight
+    weight_id: float = 20                                                   # Identity Loss weight
     weight_rec: float = 10                                                  # Reconstruction Loss weight
     weight_eyes: float = 0                                                  # Eyes Loss weight
 
@@ -36,8 +36,10 @@ class TrainingArguments:
     pretrained: bool = flag(default=True, negative_prefix="--no-")          # If using the pretrained weights for training or not
     discr_force: bool = flag(default=False, negative_prefix="--no-")        # If True Discriminator would not train when adversarial loss is high
     use_scheduler: bool = flag(default=False, negative_prefix="--no-")      # If True decreasing LR is used for learning of generator and discriminator
-    scheduler_step: int = 5000
-    scheduler_gamma: float = 0.2                                            # It is value, which shows how many times to decrease LR
+    scheduler_type: str = choice("step", "one_cycle", default="step")
+    scheduler_step: int = 5000                                              # Parameter for StepLR scheduler
+    scheduler_gamma: float = 0.2                                            # Parameter for StepLR scheduler, value which shows how many times to decrease LR
+    scheduler_total_steps: int = -1                                         # Parameter for OneCycleLR scheduler, leave to -1 to automatically compute it from max_epoch
     eye_detector_loss: bool = flag(default=False, negative_prefix="--no-")  # If True eye loss with using AdaptiveWingLoss detector is applied to generator
 
     """ W&B logging """

@@ -13,7 +13,6 @@ import yaml
 
 from LivePortrait.utils.helper import load_model, concat_feat
 from LivePortrait.utils.camera import headpose_pred_to_degree, get_rotation_matrix
-from LivePortrait.utils.retargeting_utils import calc_eye_close_ratio, calc_lip_close_ratio
 
 
 class LivePortraitWrapper(object):
@@ -74,7 +73,7 @@ class LivePortraitWrapper(object):
     def get_kp_info(self, x: torch.Tensor, **kwargs) -> dict:
         """ get the implicit keypoint information
         x: Bx3xHxW, normalized to 0~1
-        flag_refine_info: whether to trandform the pose to degrees and the dimention of the reshape
+        flag_refine_info: whether to trandform the pose to degrees and the dimension of the reshape
         return: A dict contains keys: 'pitch', 'yaw', 'roll', 't', 'exp', 'scale', 'kp'
         """
         with torch.no_grad(), self.inference_ctx():
@@ -217,19 +216,3 @@ class LivePortraitWrapper(object):
         out = np.clip(out * 255, 0, 255).astype(np.uint8)  # 0~1 -> 0~255
 
         return out
-
-    def calc_combined_eye_ratio(self, c_d_eyes_i, source_lmk):
-        c_s_eyes = calc_eye_close_ratio(source_lmk[None])
-        c_s_eyes_tensor = torch.from_numpy(c_s_eyes).float().to(self.device)
-        c_d_eyes_i_tensor = torch.Tensor([c_d_eyes_i[0][0]]).reshape(1, 1).to(self.device)
-        # [c_s,eyes, c_d,eyes,i]
-        combined_eye_ratio_tensor = torch.cat([c_s_eyes_tensor, c_d_eyes_i_tensor], dim=1)
-        return combined_eye_ratio_tensor
-
-    def calc_combined_lip_ratio(self, c_d_lip_i, source_lmk):
-        c_s_lip = calc_lip_close_ratio(source_lmk[None])
-        c_s_lip_tensor = torch.from_numpy(c_s_lip).float().to(self.device)
-        c_d_lip_i_tensor = torch.Tensor([c_d_lip_i[0]]).to(self.device).reshape(1, 1) # 1x1
-        # [c_s,lip, c_d,lip,i]
-        combined_lip_ratio_tensor = torch.cat([c_s_lip_tensor, c_d_lip_i_tensor], dim=1) # 1x2
-        return combined_lip_ratio_tensor
