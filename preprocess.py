@@ -195,26 +195,13 @@ def extract_parquet_files(laion_data_dir: str, output_dir: str, split_folder: st
     return parquet_files
 
 
-def is_face_size_ok(face: Dict[str, np.ndarray], min_original_face_size: int):
-    if face["box"] is None:
+def is_face_size_ok(face: Dict[str, np.ndarray], eye_dist_threshold: int):
+    if face["kps"] is None:
         return False
-    
-    # (x1, y1)
-    #
-    #
-    #
-    #                       (x2, y2)
 
-    x1 = face["box"][0]
-    y1 = face["box"][1]
+    eye_dist = np.linalg.norm([face["kps"][0][0] - face["kps"][1][0], face["kps"][0][1] - face["kps"][1][1]])
 
-    x2 = face["box"][2]
-    y2 = face["box"][3]
-    
-    width = abs(x2 - x1)
-    height = abs(y2 - y1)
-
-    return width >= min_original_face_size and height >= min_original_face_size
+    return eye_dist >= eye_dist_threshold
 
 
 def get_face_sort_key(face1: Dict[str, np.ndarray], face2: Dict[str, np.ndarray]):
@@ -258,14 +245,14 @@ def get_face_sort_key(face1: Dict[str, np.ndarray], face2: Dict[str, np.ndarray]
     return 0
 
 
-def filter_faces(faces: List[Dict[str, np.ndarray]], min_original_face_size: int):
-    return list(filter(lambda face: is_face_size_ok(face, min_original_face_size), faces))
+def filter_faces(faces: List[Dict[str, np.ndarray]], eye_dist_threshold: int):
+    return list(filter(lambda face: is_face_size_ok(face, eye_dist_threshold), faces))
 
 
-def verify_retargeted_faces_have_same_length(all_faces: List[List[Dict[str, np.ndarray]]], min_original_face_size: int):
+def verify_retargeted_faces_have_same_length(all_faces: List[List[Dict[str, np.ndarray]]], eye_dist_threshold: int):
     if len(all_faces) > 0:
-        length = len(filter_faces(all_faces[0], min_original_face_size))
-        return all(len(filter_faces(l, min_original_face_size)) == length for l in all_faces)
+        length = len(filter_faces(all_faces[0], eye_dist_threshold))
+        return all(len(filter_faces(l, eye_dist_threshold)) == length for l in all_faces)
     return True
 
 
@@ -316,8 +303,8 @@ def process(
 
                     image = resize_to_limit(image, max_dim=1280, division=2)
 
-                    detected_faces = face_detector(image, threshold=0.99, return_dict=True)
-                    detected_faces = filter_faces(detected_faces, args.min_original_face_size)
+                    detected_faces = face_detector(image, threshold=0.97, return_dict=True)
+                    detected_faces = filter_faces(detected_faces, args.eye_dist_threshold)
                     if len(detected_faces) == 0:
                         continue
 
@@ -349,15 +336,15 @@ def process(
                         args.output_dir_retargeted
                     )
 
-                    retargeted_images_faces = face_detector(retargeted_images, threshold=0.99, return_dict=True, cv=True)
+                    retargeted_images_faces = face_detector(retargeted_images, threshold=0.97, return_dict=True, cv=True)
 
-                    if not verify_retargeted_faces_have_same_length(retargeted_images_faces, args.min_original_face_size):
+                    if not verify_retargeted_faces_have_same_length(retargeted_images_faces, args.eye_dist_threshold):
                         continue
 
                     for image_index, retargeted_image in enumerate(retargeted_images):
                         retargeted_image_faces = filter_faces(
                             retargeted_images_faces[image_index],
-                            args.min_original_face_size
+                            args.eye_dist_threshold
                         )
 
                         if len(retargeted_image_faces) == 0:

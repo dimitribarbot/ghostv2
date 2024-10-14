@@ -30,8 +30,8 @@ class PreprocessArguments:
 
     """ Run arguments """
     device_id: int = 0
-    min_original_image_size = 250
-    min_original_face_size = 64
+    min_original_image_size: int = 250
+    eye_dist_threshold: int = 5
     final_crop_size: int = 224
 
     """ Retargeting options """
