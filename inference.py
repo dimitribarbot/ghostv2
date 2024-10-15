@@ -135,7 +135,7 @@ class GhostV2Module(L.LightningModule):
         #     int(max(Xs_face_box[0], 0)):int(min(Xs_face_box[2], Xs_image_size[0]))
         # ]
         # Xs_face_for_facenet = cv2.resize(Xs_face_for_facenet, (160, 160), interpolation=cv2.INTER_AREA).copy()
-        # Xs_face_for_facenet = img2tensor(Xs_face_for_facenet / 255., bgr2rgb=True, float32=True)
+        # Xs_face_for_facenet = img2tensor(Xs_face_for_facenet, bgr2rgb=True, float32=True)
         # Xs_face_for_facenet = (Xs_face_for_facenet - 127.5) / 128.0
         # Xs_face_for_facenet = Xs_face_for_facenet.unsqueeze(0).to(self.device)
 
@@ -156,6 +156,7 @@ class GhostV2Module(L.LightningModule):
 
         with torch.no_grad():
             Xs_embed = self.facenet(F.interpolate(Xs_face, [160, 160], mode="bilinear", align_corners=False))
+            # Xs_embed = self.facenet(Xs_face_for_facenet)
             Yt_face, _ = self.G(Xt_face, Xs_embed)
             Yt_face = torch2image(Yt_face)[:, :, ::-1]
 
