@@ -22,11 +22,41 @@ transformer_Facenet = transforms.Compose([
     transforms.Normalize([0.5, 0.5, 0.5], [0.5, 0.5, 0.5])
 ])
 
+src1 = np.array([[51.642, 50.115], [57.617, 49.990], [35.740, 69.007],
+                 [51.157, 89.050], [57.025, 89.702]],
+                dtype=np.float32)
+#<--left
+src2 = np.array([[45.031, 50.118], [65.568, 50.872], [39.677, 68.111],
+                 [45.177, 86.190], [64.246, 86.758]],
+                dtype=np.float32)
+
+#---frontal
+src3 = np.array([[39.730, 51.138], [72.270, 51.138], [56.000, 68.493],
+                 [42.463, 87.010], [69.537, 87.010]],
+                dtype=np.float32)
+
+#-->right
+src4 = np.array([[46.845, 50.872], [67.382, 50.118], [72.737, 68.111],
+                 [48.167, 86.758], [67.236, 86.190]],
+                dtype=np.float32)
+
+#-->right profile
+src5 = np.array([[54.796, 49.990], [60.771, 50.115], [76.673, 69.007],
+                 [55.388, 89.702], [61.257, 89.050]],
+                dtype=np.float32)
+
+# arcface_dst = np.array(
+#     [[38.2946, 51.6963], [73.5318, 51.5014], [56.0252, 71.7366],
+#      [41.5493, 92.3655], [70.7299, 92.2041]],
+#     dtype=np.float32)
+
 
 # standard 5 landmarks for FFHQ faces with 512 x 512
 # facexlib
 face_template = np.array([[192.98138, 239.94708], [318.90277, 240.1936], [256.63416, 314.01935], [201.26117, 371.41043], [313.08905, 371.15118]])
-face_template_src = np.expand_dims(face_template, axis=0)
+# face_template_src = np.expand_dims(face_template, axis=0)
+# arcface_src = np.expand_dims(arcface_dst, axis=0)
+default_template_src = np.array([src1, src2, src3, src4, src5])
 
 
 def torch2image(torch_image: torch.tensor) -> np.ndarray:
@@ -158,14 +188,14 @@ def get_faceswap(source_path: str,
 
 
 # Modified from https://github.com/deepinsight/insightface/blob/e896172e45157d5101448b5b9e327073073bfb1b/python-package/insightface/utils/face_align.py
-def estimate_norm(lmk: np.ndarray, image_size=512):
+def estimate_norm(lmk: np.ndarray, image_size=224):
     assert lmk.shape == (5, 2)
     tform = trans.SimilarityTransform()
     lmk_tran = np.insert(lmk, 2, values=np.ones(5), axis=1)
     min_M = []
     min_index = []
     min_error = float('inf')
-    src = face_template_src * image_size / 512
+    src = default_template_src * (image_size / 112)
     for i in np.arange(src.shape[0]):
         tform.estimate(lmk, src[i])
         M = tform.params[0:2, :]
@@ -181,7 +211,7 @@ def estimate_norm(lmk: np.ndarray, image_size=512):
 
 
 # Modified from https://github.com/deepinsight/insightface/blob/e896172e45157d5101448b5b9e327073073bfb1b/python-package/insightface/utils/face_align.py
-def norm_crop(bgr_image: cv2.typing.MatLike, landmark, face_size=112):
+def norm_crop(bgr_image: cv2.typing.MatLike, landmark, face_size=224):
     M, _ = estimate_norm(landmark, face_size)
     warped = cv2.warpAffine(bgr_image, M, (face_size, face_size), borderValue=0.0)
     return warped, M

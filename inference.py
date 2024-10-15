@@ -15,7 +15,7 @@ import lightning as L
 from network.AEI_Net import *
 from network.MultiscaleDiscriminator import *
 from utils.inference.inference_arguments import InferenceArguments
-from utils.image_processing import align_warp_face, img2tensor, torch2image, paste_face_back, enhance_face, sort_faces_by_coordinates
+from utils.image_processing import align_warp_face, img2tensor, torch2image, paste_face_back, enhance_face, sort_faces_by_coordinates, norm_crop
 from utils.inference.Dataset import FaceEmbed
 from facenet.inception_resnet_v1 import InceptionResnetV1
 from BiSeNet.bisenet import BiSeNet
@@ -62,6 +62,7 @@ class GhostV2Module(L.LightningModule):
         self.source_face_index = args.source_face_index
         self.target_face_index = args.target_face_index
         self.enhance_output = args.enhance_output
+        self.align_mode = args.align_mode
         
         checkpoint = load_file(args.G_path)
         checkpoint = { k.replace("_orig_mod.", ""): v for k,v in checkpoint.items() }
@@ -124,10 +125,14 @@ class GhostV2Module(L.LightningModule):
         sort_faces_by_coordinates(Xt_detected_faces)
 
         Xs_face_kps = Xs_detected_faces[self.source_face_index]["kps"]
-        Xs_face, _ = align_warp_face(Xs_image, Xs_face_kps, face_size=256)
-
         Xt_face_kps = Xt_detected_faces[self.target_face_index]["kps"]
-        Xt_face, Xt_affine_matrix = align_warp_face(Xt_image, Xt_face_kps, face_size=256)
+
+        if self.align_mode == "insightface":
+            Xs_face, _ = norm_crop(Xs_image, Xs_face_kps, face_size=256)
+            Xt_face, Xt_affine_matrix = norm_crop(Xt_image, Xt_face_kps, face_size=256)
+        else:
+            Xs_face, _ = align_warp_face(Xs_image, Xs_face_kps, face_size=256)
+            Xt_face, Xt_affine_matrix = align_warp_face(Xt_image, Xt_face_kps, face_size=256)
 
         Xs_face = img2tensor(Xs_face / 255., bgr2rgb=True, float32=True)
         normalize(Xs_face, (0.5, 0.5, 0.5), (0.5, 0.5, 0.5), inplace=True)

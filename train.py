@@ -211,13 +211,26 @@ class GhostV2EvalCallback(L.Callback):
             # Let's see how the swap looks on three specific photos to track the dynamics
             pl_module.G.eval()
 
-            res1 = get_faceswap("examples/images/training/source1.png", "examples/images/training/target1.png", pl_module.G, pl_module.facenet, pl_module.device)
-            res2 = get_faceswap("examples/images/training/source2.png", "examples/images/training/target2.png", pl_module.G, pl_module.facenet, pl_module.device)  
-            res3 = get_faceswap("examples/images/training/source3.png", "examples/images/training/target3.png", pl_module.G, pl_module.facenet, pl_module.device)
-            
-            res4 = get_faceswap("examples/images/training/source4.png", "examples/images/training/target4.png", pl_module.G, pl_module.facenet, pl_module.device)
-            res5 = get_faceswap("examples/images/training/source5.png", "examples/images/training/target5.png", pl_module.G, pl_module.facenet, pl_module.device)  
-            res6 = get_faceswap("examples/images/training/source6.png", "examples/images/training/target6.png", pl_module.G, pl_module.facenet, pl_module.device)
+            source1 = os.path.join(pl_module.args.example_images_path, "source1.png")
+            source2 = os.path.join(pl_module.args.example_images_path, "source2.png")
+            source3 = os.path.join(pl_module.args.example_images_path, "source3.png")
+            source4 = os.path.join(pl_module.args.example_images_path, "source4.png")
+            source5 = os.path.join(pl_module.args.example_images_path, "source5.png")
+            source6 = os.path.join(pl_module.args.example_images_path, "source6.png")
+
+            target1 = os.path.join(pl_module.args.example_images_path, "target1.png")
+            target2 = os.path.join(pl_module.args.example_images_path, "target2.png")
+            target3 = os.path.join(pl_module.args.example_images_path, "target3.png")
+            target4 = os.path.join(pl_module.args.example_images_path, "target4.png")
+            target5 = os.path.join(pl_module.args.example_images_path, "target5.png")
+            target6 = os.path.join(pl_module.args.example_images_path, "target6.png")
+
+            res1 = get_faceswap(source1, target1, pl_module.G, pl_module.facenet, pl_module.device)
+            res2 = get_faceswap(source2, target2, pl_module.G, pl_module.facenet, pl_module.device)  
+            res3 = get_faceswap(source3, target3, pl_module.G, pl_module.facenet, pl_module.device)
+            res4 = get_faceswap(source4, target4, pl_module.G, pl_module.facenet, pl_module.device)
+            res5 = get_faceswap(source5, target5, pl_module.G, pl_module.facenet, pl_module.device)  
+            res6 = get_faceswap(source6, target6, pl_module.G, pl_module.facenet, pl_module.device)
             
             output1 = np.concatenate((res1, res2, res3), axis=0)
             output2 = np.concatenate((res4, res5, res6), axis=0)

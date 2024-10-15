@@ -6,7 +6,7 @@ from simple_parsing import ArgumentParser
 
 from RetinaFace.detector import RetinaFace
 from utils.training.example_arguments import ExampleArguments
-from utils.image_processing import align_warp_face
+from utils.image_processing import align_warp_face, norm_crop
 
 
 def process_one_image(
@@ -14,6 +14,7 @@ def process_one_image(
     aligned_folder: str,
     face_detector: RetinaFace,
     final_crop_size: int,
+    align_mode: str,
 ):
     print(f"Processing image {source_image}.")
     image = cv2.imread(source_image, cv2.IMREAD_COLOR)
@@ -22,12 +23,14 @@ def process_one_image(
     save_path = os.path.join(aligned_folder, f"{image_name}.png")
     os.makedirs(aligned_folder, exist_ok=True)
 
-    detected_faces = face_detector(image, threshold=0.99, return_dict=True, cv=True)
+    detected_faces = face_detector(image, threshold=0.97, return_dict=True, cv=True)
     if len(detected_faces) == 0:
         raise ValueError(f"No face detected in source image {source_image}.")
 
-    cropped_face, _ = align_warp_face(image, detected_faces[0]["kps"])
-    cropped_face = cv2.resize(cropped_face, (final_crop_size, final_crop_size))
+    if align_mode == "insightface":
+        cropped_face, _ = norm_crop(image, detected_faces[0]["kps"], final_crop_size)
+    else:
+        cropped_face, _ = align_warp_face(image, detected_faces[0]["kps"], final_crop_size)
     print(f"Saving cropped face to {save_path}.")
     cv2.imwrite(save_path, cropped_face)
 
@@ -38,6 +41,7 @@ def process(
     aligned_folder: str,
     face_detector: RetinaFace,
     final_crop_size: int,
+    align_mode: str,
 ):
     if source_image is None and source_folder is None:
         raise ValueError("Arguments 'source_image' and 'source_folder' cannot be both empty.")
@@ -46,7 +50,7 @@ def process(
         if not os.path.exists(source_image):
             raise ValueError(f"Arguments 'source_image' {source_image} points to a file that does not exist.")
 
-        process_one_image(source_image, aligned_folder, face_detector, final_crop_size)
+        process_one_image(source_image, aligned_folder, face_detector, final_crop_size, align_mode)
     else:
         if not os.path.exists(source_folder):
             raise ValueError(f"Arguments 'source_folder' {source_folder} points to a folder that does not exist.")
@@ -54,7 +58,7 @@ def process(
         print(f"Processing images in folder {source_folder}.")        
         for dirpath, _, source_folder_images in os.walk(source_folder):
             for source_folder_image in source_folder_images:
-                process_one_image(os.path.join(dirpath, source_folder_image), aligned_folder, face_detector, final_crop_size)
+                process_one_image(os.path.join(dirpath, source_folder_image), aligned_folder, face_detector, final_crop_size, align_mode)
 
 
 def main(args: ExampleArguments):
@@ -69,7 +73,8 @@ def main(args: ExampleArguments):
         args.source_folder,
         args.aligned_folder,
         face_detector,
-        args.final_crop_size
+        args.final_crop_size,
+        args.align_mode
     )
 
 

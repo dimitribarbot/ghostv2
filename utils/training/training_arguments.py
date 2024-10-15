@@ -16,6 +16,7 @@ class TrainingArguments:
     """ Dataset params """
     dataset_path: str = make_real_path("./LaionFace-crop/")                 # Path to the dataset. If not LAION dataset is used, param --laion should be set False
     ckpt_path: Optional[str] = None                                         # Path to checkpoint to resume training.
+    example_images_path = make_real_path("./examples/images/training")      # Path to source1.png..source6.png and target1.png..target6.png training images.
     G_path: str = make_real_path("./weights/G.safetensors")                 # Path to pretrained weights for G. Only used if pretrained=True
     D_path: str = make_real_path("./weights/D.safetensors")                 # Path to pretrained weights for D. Only used if pretrained=True
     laion: bool = flag(default=True, negative_prefix="--no-")               # When using LAION dataset (or any other dataset with several photos for one identity)

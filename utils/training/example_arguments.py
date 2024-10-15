@@ -2,6 +2,8 @@ import os
 from typing import Optional
 from dataclasses import dataclass
 
+from simple_parsing import choice
+
 def make_real_path(relative_path):
     return os.path.join(os.path.dirname(os.path.realpath(__file__)), "../..", relative_path)
 
@@ -19,3 +21,4 @@ class ExampleArguments:
     """ Run arguments """
     device_id: int = 0
     final_crop_size: int = 224
+    align_mode: str = choice("facexlib", "insightface", default="facexlib")
