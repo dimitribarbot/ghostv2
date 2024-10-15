@@ -8,3 +8,5 @@ experiments/
 lightning_logs/
 venv/
 wandb/
+examples/images/inference
+examples/results/inference

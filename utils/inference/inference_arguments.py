@@ -2,7 +2,7 @@ import os
 from dataclasses import dataclass
 from typing import Optional
 
-from simple_parsing import choice
+from simple_parsing import choice, flag
 
 def make_real_path(relative_path):
     return os.path.join(os.path.dirname(os.path.realpath(__file__)), "../..", relative_path)
@@ -10,14 +10,18 @@ def make_real_path(relative_path):
 @dataclass
 class InferenceArguments:
 
+    """ Data arguments """
+    source_file_path: str = make_real_path("./examples/images/base/source1.jpg")
+    target_file_path: str = make_real_path("./examples/images/base/target1.jpg")
+    output_file_path: str = make_real_path("./examples/results/inference/source1_target1.jpg")
+
     """ Model params """
-    G_path: str = make_real_path("./weights/G.safetensors")                 # Path to pretrained weights for G. Only used if pretrained=True
-
-    """ Training params you may want to change """
-    backbone: str = choice("unet", "linknet", "resnet", default="unet")     # Backbone for attribute encoder
-    num_blocks: int = 2                                                     # Numbers of AddBlocks at AddResblock
-
-    """ Training params you probably don't want to change """
+    G_path: str = make_real_path("./experiments/saved_models_ghost_v2_5_sch_part2/G_latest.safetensors")
+    gfpgan_model_path: str = make_real_path("./weights/GFPGAN/GFPGANCleanv1-NoCE-C2.safetensors")
+    face_parser_model_path: str = make_real_path("./weights/BiSeNet/79999_iter.safetensors")
+    retina_face_model_path: str = make_real_path("./weights/RetinaFace/Resnet50_Final.safetensors")
+    backbone: str = choice("unet", "linknet", "resnet", default="unet")
+    num_blocks: int = 2
     precision: Optional[str] = choice(
         None,
         "64",
@@ -34,3 +38,9 @@ class InferenceArguments:
         "64-true",
         default=None
     )
+
+    """ Run arguments """
+    device_id: int = 0
+    enhance_output: bool = flag(default=True, negative_prefix="--no-")
+    source_face_index: int = 0
+    target_face_index: int = 0

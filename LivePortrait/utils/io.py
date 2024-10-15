@@ -2,7 +2,7 @@ import cv2
 import numpy as np
 
 
-def contiguous(obj):
+def contiguous(obj: np.ndarray):
     if not obj.flags.c_contiguous:
         obj = obj.copy(order="C")
     return obj
@@ -41,18 +41,3 @@ def resize_to_limit(img: np.ndarray, max_dim=1920, division=2):
         img = img[:new_h, :new_w]
 
     return img
-
-
-def load_img_online(img, mode="bgr", **kwargs):
-    max_dim = kwargs.get("max_dim", 1920)
-    n = kwargs.get("n", 2)
-
-    # Resize image to satisfy constraints
-    img = resize_to_limit(img, max_dim=max_dim, division=n)
-
-    if mode.lower() == "bgr":
-        return contiguous(img)
-    elif mode.lower() == "rgb":
-        return contiguous(img[..., ::-1])
-    else:
-        raise Exception(f"Unknown mode {mode}")

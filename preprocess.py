@@ -1,9 +1,8 @@
 import os
 import cv2
 from tqdm import tqdm
-import functools
 import random
-from typing import cast, Dict, List, Tuple, Union
+from typing import cast, Dict, List, Tuple
 import traceback
 
 from simple_parsing import ArgumentParser
@@ -13,56 +12,42 @@ import webdataset as wds
 
 import torch
 from safetensors.torch import load_file
-from torchvision.transforms.functional import normalize
 import numpy as np
 
+from BiSeNet.bisenet import BiSeNet
 from GFPGAN.gfpganv1_clean_arch import GFPGANv1Clean
 from LivePortrait.pipeline import LivePortraitPipeline, RetargetingParameters
 from LivePortrait.utils.io import contiguous, resize_to_limit
 from RetinaFace.detector import RetinaFace
 from face_alignment import FaceAlignment, LandmarksType
 from utils.training.preprocess_arguments import PreprocessArguments
-from utils.image_processing import align_warp_face, img2tensor, tensor2img
+from utils.image_processing import align_warp_face, paste_face_back, enhance_face, sort_faces_by_coordinates
 
 
 @torch.no_grad()
-def enhance(gfpgan: GFPGANv1Clean, img: cv2.typing.MatLike, image_name: str, device: torch.device, weight=0.5):
-    cropped_face_t = img2tensor(img / 255., bgr2rgb=True, float32=True)
-    normalize(cropped_face_t, (0.5, 0.5, 0.5), (0.5, 0.5, 0.5), inplace=True)
-    cropped_face_t = cropped_face_t.unsqueeze(0).to(device)
-
-    try:
-        output = gfpgan(cropped_face_t, return_rgb=False, weight=weight)[0]
-        restored_face = tensor2img(output.squeeze(0), rgb2bgr=True, min_max=(-1, 1))
-    except RuntimeError as error:
-        print(f"Failed inference for GFPGAN for image {image_name}: {error}.")
-        restored_face = img
-
-    restored_face = restored_face.astype('uint8')
-    
-    return restored_face
-
-
-def get_retargeted_image_ratios_and_landmarks(
-    live_portrait_pipeline: LivePortraitPipeline,
-    image: cv2.typing.MatLike,
-    faces: List[Dict[str, np.ndarray]]
+def enhance_faces_in_original_image(
+    gfpgan: GFPGANv1Clean,
+    face_parser: BiSeNet,
+    rgb_image: cv2.typing.MatLike,
+    lmks: np.ndarray,
+    image_name: str,
+    device: str,
 ):
-    landmarks: List[np.ndarray] = []
-    eye_and_lip_ratios: List[Union[Tuple[None, None] | Tuple[float, float]]] = []
+    upsample_img = cv2.cvtColor(rgb_image, cv2.COLOR_RGB2BGR)
 
-    for face_index in range(len(faces)):
-        lmk = np.array(faces[face_index]["kps"])
-        ratios = live_portrait_pipeline.init_retargeting_image(
-            image,
-            lmk,
-            do_crop=args.retargeting_do_crop,
-            crop_scale=args.retargeting_crop_scale
-        )
-        landmarks.append(lmk)
-        eye_and_lip_ratios.append(ratios)
+    for lmk in lmks:
+        cropped_face, affine_matrix = align_warp_face(upsample_img, lmk)
+        restored_face = enhance_face(gfpgan, cropped_face, image_name, device)
+        upsample_img = paste_face_back(face_parser, upsample_img, restored_face, affine_matrix, device)
 
-    return landmarks, eye_and_lip_ratios
+    if np.max(upsample_img) > 256:  # 16-bit image
+        upsample_img = upsample_img.astype(np.uint16)
+    else:
+        upsample_img = upsample_img.astype(np.uint8)
+
+    upsample_img = cv2.cvtColor(upsample_img, cv2.COLOR_BGR2RGB)
+        
+    return upsample_img
 
 
 def get_all_face_retargeting_parameters(faces: List[Dict[str, np.ndarray]], number_of_variants_per_face: int):
@@ -93,9 +78,10 @@ def get_all_face_retargeting_parameters(faces: List[Dict[str, np.ndarray]], numb
     return all_parameters
 
 
+@torch.no_grad()
 def get_retargeted_images(
     live_portrait_pipeline: LivePortraitPipeline,
-    image: cv2.typing.MatLike,
+    rgb_image: cv2.typing.MatLike,
     image_id: int,
     faces: List[Dict[str, np.ndarray]],
     number_of_variants_per_face: int,
@@ -104,9 +90,7 @@ def get_retargeted_images(
     save_retargeted: bool,
     output_dir_retargeted: str,
 ):
-    bgr_image = contiguous(image[..., ::-1])
-
-    retargeted_images = [bgr_image]
+    bgr_image = cv2.cvtColor(rgb_image, cv2.COLOR_RGB2BGR)
 
     if save_retargeted:
         os.makedirs(os.path.join(output_dir_retargeted, f"{image_id}"), exist_ok=True)
@@ -115,11 +99,7 @@ def get_retargeted_images(
             bgr_image
         )
 
-    landmarks, eye_and_lip_ratios = get_retargeted_image_ratios_and_landmarks(
-        live_portrait_pipeline,
-        image,
-        faces
-    )
+    landmarks = [np.array(face["kps"]) for face in faces]
 
     all_parameters: List[List[RetargetingParameters]] = get_all_face_retargeting_parameters(
         faces,
@@ -127,13 +107,14 @@ def get_retargeted_images(
     )
 
     retargeted_image_variations = live_portrait_pipeline.execute_image_retargeting_multi(
-        bgr_image.copy(),
+        contiguous(rgb_image),
         landmarks,
-        eye_and_lip_ratios,
         all_parameters,
         do_crop,
         crop_scale,
     )
+
+    retargeted_images = [bgr_image]
 
     if retargeted_image_variations is not None:
         retargeted_image_variations = [cv2.cvtColor(variation, cv2.COLOR_RGB2BGR) for variation in retargeted_image_variations if variation is not None]
@@ -150,9 +131,10 @@ def get_retargeted_images(
     return retargeted_images
 
 
+@torch.no_grad()
 def align_and_save(
     gfpgan: GFPGANv1Clean,
-    image: cv2.typing.MatLike,
+    bgr_image: cv2.typing.MatLike,
     lmk: np.ndarray,
     image_index: int,
     final_crop_size: Tuple[int, int],
@@ -168,8 +150,8 @@ def align_and_save(
     save_path_resized = os.path.join(cropped_face_path_resized, image_name)
     os.makedirs(save_path_resized, exist_ok=True)
     
-    cropped_face = align_warp_face(image, lmk)
-    cropped_face = enhance(gfpgan, cropped_face, image_name, device)
+    cropped_face, _ = align_warp_face(bgr_image, lmk)
+    cropped_face = enhance_face(gfpgan, cropped_face, image_name, device)
     if save_full_size:
         cv2.imwrite(os.path.join(save_path, f"{image_index}.jpg"), cropped_face)
     cropped_face = cv2.resize(cropped_face, final_crop_size)
@@ -204,47 +186,6 @@ def is_face_size_ok(face: Dict[str, np.ndarray], eye_dist_threshold: int):
     return eye_dist >= eye_dist_threshold
 
 
-def get_face_sort_key(face1: Dict[str, np.ndarray], face2: Dict[str, np.ndarray]):
-    if face1["box"] is None:
-        if face2["box"] is None:
-            return 0
-        return -1
-    
-    if face2["box"] is None:
-        return 1
-    
-    # (x1, y1)
-    #
-    #          (c1, c2)
-    #
-    #                       (x2, y2)
-
-    x1_1 = face1["box"][0]
-    y1_1 = face1["box"][1]
-    x2_1 = face1["box"][2]
-    y2_1 = face1["box"][3]
-    cx_1 = (x1_1 + x2_1) / 2
-    cy_1 = (y1_1 + y2_1) / 2
-
-    x1_2 = face2["box"][0]
-    y1_2 = face2["box"][1]
-    x2_2 = face2["box"][2]
-    y2_2 = face2["box"][3]
-    cx_2 = (x1_2 + x2_2) / 2
-    cy_2 = (y1_2 + y2_2) / 2
-
-    d1 = cx_1 * cx_1 + cy_1 * cy_1
-    d2 = cx_2 * cx_2 + cy_2 * cy_2
-
-    if d1 < d2:
-        return -1
-    
-    if d1 > d2:
-        return 1
-
-    return 0
-
-
 def filter_faces(faces: List[Dict[str, np.ndarray]], eye_dist_threshold: int):
     return list(filter(lambda face: is_face_size_ok(face, eye_dist_threshold), faces))
 
@@ -256,11 +197,13 @@ def verify_retargeted_faces_have_same_length(all_faces: List[List[Dict[str, np.n
     return True
 
 
+@torch.no_grad()
 def process(
     face_detector: RetinaFace,
     face_alignment: FaceAlignment,
     live_portrait_pipeline: LivePortraitPipeline,
     gfpgan: GFPGANv1Clean,
+    face_parser: BiSeNet,
     args: PreprocessArguments,
     device: str
 ):
@@ -309,6 +252,9 @@ def process(
                         continue
 
                     bboxes = [detected_face["box"] for detected_face in detected_faces]
+                    kpss = [detected_face["kps"] for detected_face in detected_faces]
+                    
+                    image = enhance_faces_in_original_image(gfpgan, face_parser, image, kpss, id, device)
 
                     landmarks = face_alignment.get_landmarks_from_image(
                         image,
@@ -350,7 +296,7 @@ def process(
                         if len(retargeted_image_faces) == 0:
                             continue
 
-                        retargeted_image_faces.sort(key=functools.cmp_to_key(get_face_sort_key))
+                        sort_faces_by_coordinates(retargeted_image_faces)
                         
                         for retargeted_face_index, retargeted_face in enumerate(retargeted_image_faces):
                             image_name = f'{id}_{retargeted_face_index:02d}'
@@ -367,9 +313,13 @@ def process(
                                 device,
                                 args.save_full_size
                             )
+                    if len(faces) > 1:
+                        break
                 except Exception as ex:
                     print(f"An error occurred for sample {id}: {ex}")
                     traceback.print_tb(ex.__traceback__)
+            break
+        break
 
 
 def main(args: PreprocessArguments):
@@ -402,6 +352,11 @@ def main(args: PreprocessArguments):
     gfpgan.eval()
     gfpgan = gfpgan.to(device)
 
+    face_parser = BiSeNet(num_class=19)
+    face_parser.load_state_dict(load_file(args.face_parser_model_path), strict=True)
+    face_parser.eval()
+    face_parser = face_parser.to(device)
+
     face_detector = RetinaFace(
         gpu_id=0,
         fp16=True,
@@ -429,7 +384,15 @@ def main(args: PreprocessArguments):
         device
     )
 
-    process(face_detector, face_alignment, live_portrait_pipeline, gfpgan, args, device)
+    process(
+        face_detector,
+        face_alignment,
+        live_portrait_pipeline,
+        gfpgan,
+        face_parser,
+        args,
+        device
+    )
 
 
 if __name__ == "__main__":

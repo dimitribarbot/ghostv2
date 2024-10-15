@@ -1,13 +1,20 @@
+import functools
 import cv2
 import math
-import numpy as np
-from PIL import Image
-from typing import Any
+from typing import cast, Any, Dict, List
 
 import torch
 import torch.nn.functional as F
 import torchvision.transforms as transforms
+from torchvision.transforms.functional import normalize
 from torchvision.utils import make_grid
+
+import numpy as np
+from PIL import Image
+from skimage import transform as trans
+
+from BiSeNet.bisenet import BiSeNet
+from GFPGAN.gfpganv1_clean_arch import GFPGANv1Clean
 
 
 transformer_Facenet = transforms.Compose([
@@ -19,6 +26,7 @@ transformer_Facenet = transforms.Compose([
 # standard 5 landmarks for FFHQ faces with 512 x 512
 # facexlib
 face_template = np.array([[192.98138, 239.94708], [318.90277, 240.1936], [256.63416, 314.01935], [201.26117, 371.41043], [313.08905, 371.15118]])
+face_template_src = np.expand_dims(face_template, axis=0)
 
 
 def torch2image(torch_image: torch.tensor) -> np.ndarray:
@@ -149,14 +157,147 @@ def get_faceswap(source_path: str,
     return np.concatenate((cv2.resize(source, (256, 256)), target, Yt), axis=1)
 
 
-def align_warp_face(image, landmarks):
+# Modified from https://github.com/deepinsight/insightface/blob/e896172e45157d5101448b5b9e327073073bfb1b/python-package/insightface/utils/face_align.py
+def estimate_norm(lmk: np.ndarray, image_size=512):
+    assert lmk.shape == (5, 2)
+    tform = trans.SimilarityTransform()
+    lmk_tran = np.insert(lmk, 2, values=np.ones(5), axis=1)
+    min_M = []
+    min_index = []
+    min_error = float('inf')
+    src = face_template_src * image_size / 512
+    for i in np.arange(src.shape[0]):
+        tform.estimate(lmk, src[i])
+        M = tform.params[0:2, :]
+        results = np.dot(M, lmk_tran.T)
+        results = results.T
+        error = np.sum(np.sqrt(np.sum((results - src[i])**2, axis=1)))
+        #         print(error)
+        if error < min_error:
+            min_error = error
+            min_M = M
+            min_index = i
+    return min_M, min_index
+
+
+# Modified from https://github.com/deepinsight/insightface/blob/e896172e45157d5101448b5b9e327073073bfb1b/python-package/insightface/utils/face_align.py
+def norm_crop(bgr_image: cv2.typing.MatLike, landmark, face_size=112):
+    M, _ = estimate_norm(landmark, face_size)
+    warped = cv2.warpAffine(bgr_image, M, (face_size, face_size), borderValue=0.0)
+    return warped, M
+
+
+def align_warp_face(bgr_image: cv2.typing.MatLike, landmarks: np.ndarray, face_size=512):
     """Align and warp faces with face template.
     """
     # use 5 landmarks to get affine matrix
     # use cv2.LMEDS method for the equivalence to skimage transform
     # ref: https://blog.csdn.net/yichxi/article/details/115827338
-    affine_matrix = cv2.estimateAffinePartial2D(landmarks, face_template, method=cv2.LMEDS)[0]
+    affine_matrix = cv2.estimateAffinePartial2D(landmarks, face_template * (face_size / 512.0), method=cv2.LMEDS)[0]
     # warp and crop faces
     cropped_face = cv2.warpAffine(
-        image, affine_matrix, (512, 512), borderMode=cv2.BORDER_CONSTANT, borderValue=(135, 133, 132))  # gray
-    return cropped_face
+        bgr_image, affine_matrix, (face_size, face_size), borderMode=cv2.BORDER_CONSTANT, borderValue=(135, 133, 132))  # gray
+    return cropped_face, affine_matrix
+
+
+def get_face_sort_key(face1: Dict[str, np.ndarray], face2: Dict[str, np.ndarray]):
+    if face1["kps"] is None:
+        if face2["kps"] is None:
+            return 0
+        return -1
+    
+    if face2["kps"] is None:
+        return 1
+
+    if face1["kps"][0][0] < face2["kps"][0][0]:
+        return -1
+    
+    if face1["kps"][0][0] > face2["kps"][0][0]:
+        return 1
+
+    if face1["kps"][0][1] < face2["kps"][0][1]:
+        return -1
+    
+    if face1["kps"][0][1] > face2["kps"][0][1]:
+        return 1
+
+    return 0
+
+
+def sort_faces_by_coordinates(faces: List[Dict[str, np.ndarray]]):
+    faces.sort(key=functools.cmp_to_key(get_face_sort_key))
+
+
+@torch.no_grad()
+def paste_face_back(
+    face_parser: BiSeNet,
+    original_image: cv2.typing.MatLike,
+    restored_face: cv2.typing.MatLike,
+    affine_matrix: np.ndarray,
+    device: torch.device,
+):
+    original_size = (original_image.shape[1], original_image.shape[0])
+
+    inverse_affine = cv2.invertAffineTransform(affine_matrix)
+    inv_restored = cv2.warpAffine(restored_face, inverse_affine, original_size)
+
+    face_input = cv2.resize(restored_face, (512, 512), interpolation=cv2.INTER_LINEAR)
+    face_input = img2tensor(restored_face / 255., bgr2rgb=True, float32=True)
+    normalize(face_input, (0.5, 0.5, 0.5), (0.5, 0.5, 0.5), inplace=True)
+    face_input = face_input.unsqueeze(0).to(device)
+
+    with torch.no_grad():
+        out = cast(torch.Tensor, face_parser(face_input)[0])
+    out = out.argmax(dim=1).squeeze().cpu().numpy()
+    
+    mask = np.zeros(out.shape)
+    MASK_COLORMAP = [0, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 0, 255, 0, 0, 0]
+    for idx, color in enumerate(MASK_COLORMAP):
+        mask[out == idx] = color
+    #  blur the mask
+    mask = cv2.GaussianBlur(mask, (101, 101), 11)
+    mask = cv2.GaussianBlur(mask, (101, 101), 11)
+    # remove the black borders
+    thres = 10
+    mask[:thres, :] = 0
+    mask[-thres:, :] = 0
+    mask[:, :thres] = 0
+    mask[:, -thres:] = 0
+    mask = mask / 255.
+
+    mask = cv2.resize(mask, restored_face.shape[:2])
+    mask = cv2.warpAffine(mask, inverse_affine, original_size, flags=3)
+    inv_soft_mask = mask[:, :, None]
+
+    if len(original_image.shape) == 3 and original_image.shape[2] == 4:  # alpha channel
+        alpha = original_image[:, :, 3:]
+        original_image = inv_soft_mask * inv_restored + (1 - inv_soft_mask) * original_image[:, :, 0:3]
+        original_image = np.concatenate((original_image, alpha), axis=2)
+    else:
+        original_image = inv_soft_mask * inv_restored + (1 - inv_soft_mask) * original_image
+    
+    return original_image
+
+
+@torch.no_grad()
+def enhance_face(
+    gfpgan: GFPGANv1Clean,
+    img_bgr: cv2.typing.MatLike,
+    image_name: str,
+    device: torch.device,
+    weight=0.5
+):
+    cropped_face_t = img2tensor(img_bgr / 255., bgr2rgb=True, float32=True)
+    normalize(cropped_face_t, (0.5, 0.5, 0.5), (0.5, 0.5, 0.5), inplace=True)
+    cropped_face_t = cropped_face_t.unsqueeze(0).to(device)
+
+    try:
+        output = cast(torch.Tensor, gfpgan(cropped_face_t, return_rgb=False, weight=weight)[0])
+        restored_face = tensor2img(output.squeeze(0), rgb2bgr=True, min_max=(-1, 1))
+    except RuntimeError as error:
+        print(f"Failed GFPGAN inference for {image_name} image: {error}.")
+        restored_face = img_bgr
+
+    restored_face = restored_face.astype('uint8')
+    
+    return restored_face

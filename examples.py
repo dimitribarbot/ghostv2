@@ -26,7 +26,7 @@ def process_one_image(
     if len(detected_faces) == 0:
         raise ValueError(f"No face detected in source image {source_image}.")
 
-    cropped_face = align_warp_face(image, detected_faces[0]["kps"])
+    cropped_face, _ = align_warp_face(image, detected_faces[0]["kps"])
     cropped_face = cv2.resize(cropped_face, (final_crop_size, final_crop_size))
     print(f"Saving cropped face to {save_path}.")
     cv2.imwrite(save_path, cropped_face)

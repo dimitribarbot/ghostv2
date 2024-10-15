@@ -1,6 +1,6 @@
 import os
 from dataclasses import dataclass
-from typing import cast, List, Tuple, Union
+from typing import cast, List, Tuple
 
 import cv2
 import numpy as np
@@ -10,7 +10,6 @@ from LivePortrait.utils.camera import get_rotation_matrix
 from LivePortrait.utils.crop import prepare_paste_back, paste_back
 from LivePortrait.utils.cropper import Cropper
 from LivePortrait.utils.retargeting_utils import calc_eye_close_ratio, calc_lip_close_ratio
-from LivePortrait.utils.io import load_img_online
 from LivePortrait.wrapper import LivePortraitWrapper
 
 
@@ -192,28 +191,6 @@ class LivePortraitPipeline(object):
         c_d_lip_i_tensor = c_d_lip_i.unsqueeze(1) # bsx1
         combined_lip_ratio_tensor = torch.cat([c_s_lip_tensor, c_d_lip_i_tensor], dim=1) # bsx2
         return combined_lip_ratio_tensor
-
-    @torch.no_grad()
-    def init_retargeting_image(
-        self,
-        input_image: cv2.typing.MatLike,
-        original_lmk: np.ndarray,
-        do_crop: bool, 
-        crop_scale: float,
-    ):
-        img_rgb = load_img_online(input_image, mode='rgb', max_dim=1280, n=16)
-        if do_crop:
-            crop_info = self.cropper.crop_source_image(img_rgb, original_lmk, crop_scale)
-            lmk = crop_info['lmk_crop']
-        else:
-            lmk = self.cropper.calc_lmk_from_cropped_image(img_rgb, original_lmk)
-        if lmk is None:
-            return None, None
-        source_eye_ratio = calc_eye_close_ratio(lmk[None])
-        source_lip_ratio = calc_lip_close_ratio(lmk[None])
-        source_eye_ratio = round(float(source_eye_ratio.mean()), 2)
-        source_lip_ratio = round(float(source_lip_ratio[0][0]), 2)
-        return source_eye_ratio, source_lip_ratio
     
 
     @torch.no_grad()
@@ -229,16 +206,20 @@ class LivePortraitPipeline(object):
     ):
         if do_crop:
             crop_info = self.cropper.crop_source_image(img_rgb, original_lmk, crop_scale)
-            I_s = self.wrapper.prepare_source(crop_info['img_crop_256x256'])
             source_lmk_user = crop_info['lmk_crop']
+            I_s = self.wrapper.prepare_source(crop_info['img_crop_256x256'])
             crop_M_c2o = crop_info['M_c2o']
             mask_ori = prepare_paste_back(self.mask_crop, crop_M_c2o, dsize=(img_rgb.shape[1], img_rgb.shape[0]))
         else:
-            I_s = self.wrapper.prepare_source(img_rgb)
             source_lmk_user = self.cropper.calc_lmk_from_cropped_image(img_rgb, original_lmk)
+            I_s = self.wrapper.prepare_source(img_rgb)
             crop_M_c2o = None
             mask_ori = None
         x_s_info = self.wrapper.get_kp_info(I_s)
+        source_eye_ratio = calc_eye_close_ratio(source_lmk_user[None])
+        source_lip_ratio = calc_lip_close_ratio(source_lmk_user[None])
+        source_eye_ratio = round(float(source_eye_ratio.mean()), 2)
+        source_lip_ratio = round(float(source_lip_ratio[0][0]), 2)
         x_s_info_pitch = x_s_info['pitch'].repeat(input_head_pitch_variation.size(0), 1)
         x_s_info_yaw = x_s_info['yaw'].repeat(input_head_yaw_variation.size(0), 1)
         x_s_info_roll = x_s_info['roll'].repeat(input_head_roll_variation.size(0), 1)
@@ -249,15 +230,14 @@ class LivePortraitPipeline(object):
         R_d_user = get_rotation_matrix(x_d_info_user_pitch, x_d_info_user_yaw, x_d_info_user_roll)
         f_s_user = self.wrapper.extract_feature_3d(I_s)
         x_s_user = self.wrapper.transform_keypoint(x_s_info)
-        return f_s_user, x_s_user, R_s_user, R_d_user, x_s_info, source_lmk_user, crop_M_c2o, mask_ori
+        return f_s_user, x_s_user, R_s_user, R_d_user, x_s_info, source_lmk_user, source_eye_ratio, source_lip_ratio, crop_M_c2o, mask_ori
     
 
     @torch.no_grad()
     def execute_image_retargeting_multi(
         self,
-        input_image: cv2.typing.MatLike,
+        img_rgb: cv2.typing.MatLike,
         original_lmks: List[np.ndarray],
-        eye_and_lip_ratios: List[Union[Tuple[None, None] | Tuple[float, float]]],
         all_parameters: List[List[RetargetingParameters]],
         do_crop: bool,
         crop_scale: float,
@@ -265,19 +245,11 @@ class LivePortraitPipeline(object):
         if len(original_lmks) > 1 and not do_crop:
             raise ValueError("Cannot handle multiple face when do_crop is False.")
 
-        if len(original_lmks) != len(eye_and_lip_ratios) or len(eye_and_lip_ratios) != len(all_parameters) or len(all_parameters) == 0:
+        if len(original_lmks) != len(all_parameters) or len(all_parameters) == 0:
             return None
-
-        img_rgb = load_img_online(input_image, mode='rgb', max_dim=1280, n=2)
 
         paste_back_info: List[Tuple[np.ndarray, np.ndarray, np.ndarray]] = []
         for face_index in range(len(original_lmks)):
-            source_eye_ratio = eye_and_lip_ratios[face_index][0]
-            source_lip_ratio = eye_and_lip_ratios[face_index][1]
-
-            if source_eye_ratio is None or source_lip_ratio is None:
-                continue
-
             original_lmk = original_lmks[face_index]
             parameters = all_parameters[face_index]
 
@@ -285,7 +257,7 @@ class LivePortraitPipeline(object):
             input_head_yaw_variation = torch.tensor(list(map(lambda variation: variation.input_head_yaw_variation, parameters))).to(self.device)
             input_head_roll_variation = torch.tensor(list(map(lambda variation: variation.input_head_roll_variation, parameters))).to(self.device)
 
-            f_s_user, x_s_user, R_s_user, R_d_user, x_s_info, source_lmk_user, crop_M_c2o, mask_ori = \
+            f_s_user, x_s_user, R_s_user, R_d_user, x_s_info, source_lmk_user, source_eye_ratio, source_lip_ratio, crop_M_c2o, mask_ori = \
                 self.prepare_retargeting_image_multi(
                     img_rgb, original_lmk, input_head_pitch_variation, input_head_yaw_variation, input_head_roll_variation, do_crop, crop_scale)
             if source_lmk_user is None:

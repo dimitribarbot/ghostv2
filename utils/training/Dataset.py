@@ -9,9 +9,6 @@ from PIL import Image
 import cv2
 from tqdm import tqdm
 
-import sys
-sys.path.append('..')
-
 
 def read_image(image_path: str):
     x = cv2.imread(image_path)[:, :, ::-1]
