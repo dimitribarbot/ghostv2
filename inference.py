@@ -181,7 +181,7 @@ def main(args: InferenceArguments):
         print("Cuda is not available, using CPU. Check if it's ok.")
 
     print("Creating PyTorch Lightning trainer")
-    trainer = L.Trainer(precision=args.precision)
+    trainer = L.Trainer(precision=args.precision, logger=[])
 
     print("Creating GhostV2 Data Module")
     dm = GhostV2DataModule(
