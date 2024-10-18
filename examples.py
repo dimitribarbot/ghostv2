@@ -6,7 +6,7 @@ from simple_parsing import ArgumentParser
 
 from RetinaFace.detector import RetinaFace
 from utils.training.example_arguments import ExampleArguments
-from utils.image_processing import align_warp_face, norm_crop
+from utils.image_processing import get_aligned_face_and_affine_matrix
 
 
 def process_one_image(
@@ -27,10 +27,7 @@ def process_one_image(
     if len(detected_faces) == 0:
         raise ValueError(f"No face detected in source image {source_image}.")
 
-    if align_mode == "insightface":
-        cropped_face, _ = norm_crop(image, detected_faces[0]["kps"], final_crop_size)
-    else:
-        cropped_face, _ = align_warp_face(image, detected_faces[0]["kps"], final_crop_size)
+    cropped_face, _ = get_aligned_face_and_affine_matrix(image, detected_faces[0]["kps"], final_crop_size, align_mode)
     print(f"Saving cropped face to {save_path}.")
     cv2.imwrite(save_path, cropped_face)
 

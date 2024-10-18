@@ -15,6 +15,7 @@ from skimage import transform as trans
 
 from BiSeNet.bisenet import BiSeNet
 from GFPGAN.gfpganv1_clean_arch import GFPGANv1Clean
+from utils.adaface_align_trans import get_reference_facial_points, warp_and_crop_face
 
 
 transformer_Facenet = transforms.Compose([
@@ -57,6 +58,8 @@ face_template = np.array([[192.98138, 239.94708], [318.90277, 240.1936], [256.63
 # face_template_src = np.expand_dims(face_template, axis=0)
 # arcface_src = np.expand_dims(arcface_dst, axis=0)
 default_template_src = np.array([src1, src2, src3, src4, src5])
+
+adaface_reference = None
 
 
 def torch2image(torch_image: torch.tensor) -> np.ndarray:
@@ -163,17 +166,27 @@ def read_torch_image(path: str) -> torch.tensor:
     return image
 
 
+def get_face_embeddings(source: torch.Tensor, model: Any, face_embeddings: str):
+    if face_embeddings == "arcface":
+        embed = model(F.interpolate(source, [112, 112], mode="bilinear", align_corners=False))
+    elif face_embeddings == "adaface":
+        embed, _ = model(F.interpolate(source, [112, 112], mode="bilinear", align_corners=False))
+    else:
+        embed = model(F.interpolate(source, [160, 160], mode="bilinear", align_corners=False))
+    return embed
+
+
 def get_faceswap(source_path: str,
                  target_path: str,
                  G: Any,
                  model: Any,
-                 model_size: int,
+                 face_embeddings: str,
                  device: str) -> np.array:
     '''G: generator model, facenet: Facenet model, device: torch device'''
     source = read_torch_image(source_path)
     source = source.to(device)
 
-    embeds = model(F.interpolate(source, [model_size, model_size], mode='bilinear', align_corners=False))
+    embeds = get_face_embeddings(source, model, face_embeddings)
 
     target = read_torch_image(target_path)
     target = target.to(device)
@@ -229,6 +242,21 @@ def align_warp_face(bgr_image: cv2.typing.MatLike, landmarks: np.ndarray, face_s
     cropped_face = cv2.warpAffine(
         bgr_image, affine_matrix, (face_size, face_size), borderMode=cv2.BORDER_CONSTANT, borderValue=(135, 133, 132))  # gray
     return cropped_face, affine_matrix
+
+
+def get_aligned_face(bgr_image: cv2.typing.MatLike, landmarks: np.ndarray, face_size=512):
+    global adaface_reference
+    if adaface_reference is None:
+        adaface_reference = get_reference_facial_points(output_size=(face_size, face_size), default_square=True)
+    return warp_and_crop_face(bgr_image, landmarks, adaface_reference, crop_size=(face_size, face_size))
+
+
+def get_aligned_face_and_affine_matrix(bgr_image: cv2.typing.MatLike, landmarks: np.ndarray, face_size=512, align_mode="facexlib"):
+    if align_mode == "insightface":
+        return norm_crop(bgr_image, landmarks, face_size=face_size)
+    elif align_mode == "mtcnn":
+        return get_aligned_face(bgr_image, landmarks, face_size=face_size)
+    return align_warp_face(bgr_image, landmarks, face_size=face_size)
 
 
 def get_face_sort_key(face1: Dict[str, np.ndarray], face2: Dict[str, np.ndarray]):

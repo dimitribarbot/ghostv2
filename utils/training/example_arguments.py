@@ -13,7 +13,7 @@ class ExampleArguments:
     """ Data arguments """
     source_image: Optional[str] = None
     source_folder: Optional[str] = None
-    aligned_folder: str = make_real_path("./examples/images/training")
+    aligned_folder: str = make_real_path("./examples/images/training_facexlib")
 
     """ Model arguments """
     retina_face_model_path: str = make_real_path("./weights/RetinaFace/Resnet50_Final.safetensors")
@@ -21,4 +21,4 @@ class ExampleArguments:
     """ Run arguments """
     device_id: int = 0
     final_crop_size: int = 224
-    align_mode: str = choice("facexlib", "insightface", default="facexlib")
+    align_mode: str = choice("facexlib", "insightface", "mtcnn", default="facexlib")

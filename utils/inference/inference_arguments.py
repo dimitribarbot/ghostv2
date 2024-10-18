@@ -20,7 +20,7 @@ class InferenceArguments:
     gfpgan_model_path: str = make_real_path("./weights/GFPGAN/GFPGANCleanv1-NoCE-C2.safetensors")
     face_parser_model_path: str = make_real_path("./weights/BiSeNet/79999_iter.safetensors")
     retina_face_model_path: str = make_real_path("./weights/RetinaFace/Resnet50_Final.safetensors")
-    face_embeddings: str = choice("facenet", "arcface", default="facenet")
+    face_embeddings: str = choice("facenet", "arcface", "adaface", default="facenet")
     backbone: str = choice("unet", "linknet", "resnet", default="unet")
     num_blocks: int = 2
     precision: Optional[str] = choice(
@@ -45,4 +45,4 @@ class InferenceArguments:
     enhance_output: bool = flag(default=True, negative_prefix="--no-")
     source_face_index: int = 0
     target_face_index: int = 0
-    align_mode: str = choice("facexlib", "insightface", default="facexlib")
+    align_mode: str = choice("facexlib", "insightface", "mtcnn", default="facexlib")

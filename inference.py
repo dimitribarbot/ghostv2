@@ -15,7 +15,8 @@ import lightning as L
 from network.AEI_Net import *
 from network.MultiscaleDiscriminator import *
 from utils.inference.inference_arguments import InferenceArguments
-from utils.image_processing import align_warp_face, img2tensor, torch2image, paste_face_back, enhance_face, sort_faces_by_coordinates, norm_crop
+from utils.image_processing import get_face_embeddings, img2tensor, \
+    torch2image, paste_face_back, enhance_face, sort_faces_by_coordinates, get_aligned_face_and_affine_matrix
 from utils.inference.Dataset import FaceEmbed
 from BiSeNet.bisenet import BiSeNet
 from GFPGAN.gfpganv1_clean_arch import GFPGANv1Clean
@@ -73,14 +74,19 @@ class GhostV2Module(L.LightningModule):
 
         if args.face_embeddings == "arcface":
             from ArcFace.iresnet import iresnet100
-            self.netArc = iresnet100()
-            self.netArc.load_state_dict(load_file("./weights/ArcFace/backbone.safetensors"))
-            self.netArc.eval()
+            self.embedding_model = iresnet100()
+            self.embedding_model.load_state_dict(load_file("./weights/ArcFace/backbone.safetensors"))
+            self.embedding_model.eval()
+        elif args.face_embeddings == "adaface":
+            from AdaFace.net import build_model
+            self.embedding_model = build_model("ir_101")
+            self.embedding_model.load_state_dict(load_file("./weights/AdaFace/adaface_ir101_webface12m.safetensors"))
+            self.embedding_model.eval()
         else:
             from facenet.inception_resnet_v1 import InceptionResnetV1
-            self.facenet = InceptionResnetV1()
-            self.facenet.load_state_dict(load_file("./weights/Facenet/facenet_pytorch.safetensors"))
-            self.facenet.eval()
+            self.embedding_model = InceptionResnetV1()
+            self.embedding_model.load_state_dict(load_file("./weights/Facenet/facenet_pytorch.safetensors"))
+            self.embedding_model.eval()
 
         self.gfpgan = GFPGANv1Clean(
             out_size=512,
@@ -131,27 +137,11 @@ class GhostV2Module(L.LightningModule):
         sort_faces_by_coordinates(Xs_detected_faces)
         sort_faces_by_coordinates(Xt_detected_faces)
 
-        # Xs_image_size = Xs_image.shape[1::-1]
-
-        # Xs_face_box = Xs_detected_faces[self.source_face_index]["box"]
         Xs_face_kps = Xs_detected_faces[self.source_face_index]["kps"]
         Xt_face_kps = Xt_detected_faces[self.target_face_index]["kps"]
 
-        # Xs_face_for_facenet = Xs_image[
-        #     int(max(Xs_face_box[1], 0)):int(min(Xs_face_box[3], Xs_image_size[1])),
-        #     int(max(Xs_face_box[0], 0)):int(min(Xs_face_box[2], Xs_image_size[0]))
-        # ]
-        # Xs_face_for_facenet = cv2.resize(Xs_face_for_facenet, (160, 160), interpolation=cv2.INTER_AREA).copy()
-        # Xs_face_for_facenet = img2tensor(Xs_face_for_facenet, bgr2rgb=True, float32=True)
-        # Xs_face_for_facenet = (Xs_face_for_facenet - 127.5) / 128.0
-        # Xs_face_for_facenet = Xs_face_for_facenet.unsqueeze(0).to(self.device)
-
-        if self.align_mode == "insightface":
-            Xs_face, _ = norm_crop(Xs_image, Xs_face_kps, face_size=256)
-            Xt_face, Xt_affine_matrix = norm_crop(Xt_image, Xt_face_kps, face_size=256)
-        else:
-            Xs_face, _ = align_warp_face(Xs_image, Xs_face_kps, face_size=256)
-            Xt_face, Xt_affine_matrix = align_warp_face(Xt_image, Xt_face_kps, face_size=256)
+        Xs_face, _ = get_aligned_face_and_affine_matrix(Xs_image, Xs_face_kps, face_size=256, align_mode=self.align_mode)
+        Xt_face, Xt_affine_matrix = get_aligned_face_and_affine_matrix(Xt_image, Xt_face_kps, face_size=256, align_mode=self.align_mode)
 
         Xs_face = img2tensor(Xs_face / 255., bgr2rgb=True, float32=True)
         normalize(Xs_face, (0.5, 0.5, 0.5), (0.5, 0.5, 0.5), inplace=True)
@@ -162,11 +152,7 @@ class GhostV2Module(L.LightningModule):
         Xt_face = Xt_face.unsqueeze(0).to(self.device)
 
         with torch.no_grad():
-            if self.face_embeddings == "arcface":
-                Xs_embed = self.netArc(F.interpolate(Xs_face, [112, 112], mode="bilinear", align_corners=False))
-            else:
-                Xs_embed = self.facenet(F.interpolate(Xs_face, [160, 160], mode="bilinear", align_corners=False))
-                # Xs_embed = self.facenet(Xs_face_for_facenet)
+            Xs_embed = get_face_embeddings(Xs_face, self.embedding_model, self.face_embeddings)
             Yt_face, _ = self.G(Xt_face, Xs_embed)
             Yt_face = torch2image(Yt_face)[:, :, ::-1]
 

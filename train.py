@@ -24,7 +24,7 @@ from network.MultiscaleDiscriminator import *
 from AdaptiveWingLoss.core import models
 from utils.training.training_arguments import TrainingArguments
 from utils.training.Dataset import FaceEmbedLaion, FaceEmbed
-from utils.image_processing import make_image_list, get_faceswap
+from utils.image_processing import get_face_embeddings, make_image_list, get_faceswap
 from utils.training.losses import compute_discriminator_loss, compute_generator_losses
 from utils.training.detector import detect_landmarks, paint_eyes
 
@@ -103,14 +103,19 @@ class GhostV2Module(L.LightningModule):
 
         if self.args.face_embeddings == "arcface":
             from ArcFace.iresnet import iresnet100
-            self.netArc = iresnet100()
-            self.netArc.load_state_dict(load_file("./weights/ArcFace/backbone.safetensors"))
-            self.netArc.eval()
+            self.embedding_model = iresnet100()
+            self.embedding_model.load_state_dict(load_file("./weights/ArcFace/backbone.safetensors"))
+            self.embedding_model.eval()            
+        elif args.face_embeddings == "adaface":
+            from AdaFace.net import build_model
+            self.embedding_model = build_model("ir_101")
+            self.embedding_model.load_state_dict(load_file("./weights/AdaFace/adaface_ir101_webface12m.safetensors"))
+            self.embedding_model.eval()
         else:
             from facenet.inception_resnet_v1 import InceptionResnetV1
-            self.facenet = InceptionResnetV1()
-            self.facenet.load_state_dict(load_file("./weights/Facenet/facenet_pytorch.safetensors"))
-            self.facenet.eval()
+            self.embedding_model = InceptionResnetV1()
+            self.embedding_model.load_state_dict(load_file("./weights/Facenet/facenet_pytorch.safetensors"))
+            self.embedding_model.eval()
 
         if self.args.eye_detector_loss:
             self.model_ft = models.FAN(4, False, False, 98)
@@ -137,10 +142,7 @@ class GhostV2Module(L.LightningModule):
 
         # get the identity embeddings of Xs
         with torch.no_grad():
-            if self.args.face_embeddings == "arcface":
-                embed = self.netArc(F.interpolate(Xs_orig, [112, 112], mode="bilinear", align_corners=False))
-            else:
-                embed = self.facenet(F.interpolate(Xs_orig, [160, 160], mode="bilinear", align_corners=False))
+            embed = get_face_embeddings(Xs_orig, self.embedding_model, self.args.face_embeddings)
 
         diff_person = torch.ones_like(same_person, device=self.device)
 
@@ -152,10 +154,7 @@ class GhostV2Module(L.LightningModule):
 
         Y, Xt_attr = self.G(Xt, embed)
         Di = self.D(Y)
-        if self.args.face_embeddings == "arcface":
-            ZY = self.netArc(F.interpolate(Y, [112, 112], mode="bilinear", align_corners=False))
-        else:
-            ZY = self.facenet(F.interpolate(Y, [160, 160], mode="bilinear", align_corners=False))
+        ZY = get_face_embeddings(Y, self.embedding_model, self.args.face_embeddings)
         
         if self.args.eye_detector_loss:
             Xt_eyes, Xt_heatmap_left, Xt_heatmap_right = detect_landmarks(Xt, self.model_ft)
@@ -237,14 +236,12 @@ class GhostV2EvalCallback(L.Callback):
             target5 = os.path.join(pl_module.args.example_images_path, "target5.png")
             target6 = os.path.join(pl_module.args.example_images_path, "target6.png")
 
-            model, model_size = (pl_module.netArc, 112) if pl_module.args.face_embeddings == "arcface" else (pl_module.facenet, 160)
-
-            res1 = get_faceswap(source1, target1, pl_module.G, model, model_size, pl_module.device)
-            res2 = get_faceswap(source2, target2, pl_module.G, model, model_size, pl_module.device)  
-            res3 = get_faceswap(source3, target3, pl_module.G, model, model_size, pl_module.device)
-            res4 = get_faceswap(source4, target4, pl_module.G, model, model_size, pl_module.device)
-            res5 = get_faceswap(source5, target5, pl_module.G, model, model_size, pl_module.device)  
-            res6 = get_faceswap(source6, target6, pl_module.G, model, model_size, pl_module.device)
+            res1 = get_faceswap(source1, target1, pl_module.G, pl_module.embedding_model, pl_module.args.face_embeddings, pl_module.device)
+            res2 = get_faceswap(source2, target2, pl_module.G, pl_module.embedding_model, pl_module.args.face_embeddings, pl_module.device)  
+            res3 = get_faceswap(source3, target3, pl_module.G, pl_module.embedding_model, pl_module.args.face_embeddings, pl_module.device)
+            res4 = get_faceswap(source4, target4, pl_module.G, pl_module.embedding_model, pl_module.args.face_embeddings, pl_module.device)
+            res5 = get_faceswap(source5, target5, pl_module.G, pl_module.embedding_model, pl_module.args.face_embeddings, pl_module.device)  
+            res6 = get_faceswap(source6, target6, pl_module.G, pl_module.embedding_model, pl_module.args.face_embeddings, pl_module.device)
             
             output1 = np.concatenate((res1, res2, res3), axis=0)
             output2 = np.concatenate((res4, res5, res6), axis=0)
