@@ -166,13 +166,14 @@ def read_torch_image(path: str) -> torch.tensor:
 def get_faceswap(source_path: str,
                  target_path: str,
                  G: Any,
-                 facenet: Any, 
+                 model: Any,
+                 model_size: int,
                  device: str) -> np.array:
     '''G: generator model, facenet: Facenet model, device: torch device'''
     source = read_torch_image(source_path)
     source = source.to(device)
 
-    embeds = facenet(F.interpolate(source, [160, 160], mode='bilinear', align_corners=False))
+    embeds = model(F.interpolate(source, [model_size, model_size], mode='bilinear', align_corners=False))
 
     target = read_torch_image(target_path)
     target = target.to(device)

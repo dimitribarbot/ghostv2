@@ -20,6 +20,7 @@ class InferenceArguments:
     gfpgan_model_path: str = make_real_path("./weights/GFPGAN/GFPGANCleanv1-NoCE-C2.safetensors")
     face_parser_model_path: str = make_real_path("./weights/BiSeNet/79999_iter.safetensors")
     retina_face_model_path: str = make_real_path("./weights/RetinaFace/Resnet50_Final.safetensors")
+    face_embeddings: str = choice("facenet", "arcface", default="facenet")
     backbone: str = choice("unet", "linknet", "resnet", default="unet")
     num_blocks: int = 2
     precision: Optional[str] = choice(

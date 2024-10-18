@@ -27,7 +27,6 @@ from utils.training.Dataset import FaceEmbedLaion, FaceEmbed
 from utils.image_processing import make_image_list, get_faceswap
 from utils.training.losses import compute_discriminator_loss, compute_generator_losses
 from utils.training.detector import detect_landmarks, paint_eyes
-from facenet.inception_resnet_v1 import InceptionResnetV1
 
 print("finished imports")
 
@@ -102,9 +101,16 @@ class GhostV2Module(L.LightningModule):
             except FileNotFoundError:
                 print("Not found pretrained weights. Continue without any pretrained weights.")
 
-        self.facenet = InceptionResnetV1()
-        self.facenet.load_state_dict(load_file("./weights/Facenet/facenet_pytorch.safetensors"))
-        self.facenet.eval()
+        if self.args.face_embeddings == "arcface":
+            from ArcFace.iresnet import iresnet100
+            self.netArc = iresnet100()
+            self.netArc.load_state_dict(load_file("./weights/ArcFace/backbone.safetensors"))
+            self.netArc.eval()
+        else:
+            from facenet.inception_resnet_v1 import InceptionResnetV1
+            self.facenet = InceptionResnetV1()
+            self.facenet.load_state_dict(load_file("./weights/Facenet/facenet_pytorch.safetensors"))
+            self.facenet.eval()
 
         if self.args.eye_detector_loss:
             self.model_ft = models.FAN(4, False, False, 98)
@@ -131,7 +137,10 @@ class GhostV2Module(L.LightningModule):
 
         # get the identity embeddings of Xs
         with torch.no_grad():
-            embed = self.facenet(F.interpolate(Xs_orig, [160, 160], mode="bilinear", align_corners=False))
+            if self.args.face_embeddings == "arcface":
+                embed = self.netArc(F.interpolate(Xs_orig, [112, 112], mode="bilinear", align_corners=False))
+            else:
+                embed = self.facenet(F.interpolate(Xs_orig, [160, 160], mode="bilinear", align_corners=False))
 
         diff_person = torch.ones_like(same_person, device=self.device)
 
@@ -143,7 +152,10 @@ class GhostV2Module(L.LightningModule):
 
         Y, Xt_attr = self.G(Xt, embed)
         Di = self.D(Y)
-        ZY = self.facenet(F.interpolate(Y, [160, 160], mode="bilinear", align_corners=False))
+        if self.args.face_embeddings == "arcface":
+            ZY = self.netArc(F.interpolate(Y, [112, 112], mode="bilinear", align_corners=False))
+        else:
+            ZY = self.facenet(F.interpolate(Y, [160, 160], mode="bilinear", align_corners=False))
         
         if self.args.eye_detector_loss:
             Xt_eyes, Xt_heatmap_left, Xt_heatmap_right = detect_landmarks(Xt, self.model_ft)
@@ -225,12 +237,14 @@ class GhostV2EvalCallback(L.Callback):
             target5 = os.path.join(pl_module.args.example_images_path, "target5.png")
             target6 = os.path.join(pl_module.args.example_images_path, "target6.png")
 
-            res1 = get_faceswap(source1, target1, pl_module.G, pl_module.facenet, pl_module.device)
-            res2 = get_faceswap(source2, target2, pl_module.G, pl_module.facenet, pl_module.device)  
-            res3 = get_faceswap(source3, target3, pl_module.G, pl_module.facenet, pl_module.device)
-            res4 = get_faceswap(source4, target4, pl_module.G, pl_module.facenet, pl_module.device)
-            res5 = get_faceswap(source5, target5, pl_module.G, pl_module.facenet, pl_module.device)  
-            res6 = get_faceswap(source6, target6, pl_module.G, pl_module.facenet, pl_module.device)
+            model, model_size = (pl_module.netArc, 112) if pl_module.args.face_embeddings == "arcface" else (pl_module.facenet, 160)
+
+            res1 = get_faceswap(source1, target1, pl_module.G, model, model_size, pl_module.device)
+            res2 = get_faceswap(source2, target2, pl_module.G, model, model_size, pl_module.device)  
+            res3 = get_faceswap(source3, target3, pl_module.G, model, model_size, pl_module.device)
+            res4 = get_faceswap(source4, target4, pl_module.G, model, model_size, pl_module.device)
+            res5 = get_faceswap(source5, target5, pl_module.G, model, model_size, pl_module.device)  
+            res6 = get_faceswap(source6, target6, pl_module.G, model, model_size, pl_module.device)
             
             output1 = np.concatenate((res1, res2, res3), axis=0)
             output2 = np.concatenate((res4, res5, res6), axis=0)

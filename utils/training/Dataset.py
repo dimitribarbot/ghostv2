@@ -29,7 +29,7 @@ class FaceEmbed(TensorDataset):
 
         self.N = len(self.images_list)
 
-        self.transforms_facenet = transforms.Compose([
+        self.transforms_embeddings = transforms.Compose([
             transforms.ColorJitter(0.2, 0.2, 0.2, 0.01),
             transforms.Resize((224, 224)),
             transforms.ToTensor(),
@@ -56,7 +56,7 @@ class FaceEmbed(TensorDataset):
             Xt = Xs.copy()
             same_person = 1
             
-        return self.transforms_facenet(Xs), self.transforms_base(Xs),  self.transforms_base(Xt), same_person
+        return self.transforms_embeddings(Xs), self.transforms_base(Xs),  self.transforms_base(Xt), same_person
 
     def __len__(self):
         return self.N
@@ -92,4 +92,4 @@ class FaceEmbedLaion(FaceEmbed):
                 Xt = Xs.copy()
             same_person = 1
             
-        return self.transforms_facenet(Xs), self.transforms_base(Xs),  self.transforms_base(Xt), same_person
+        return self.transforms_embeddings(Xs), self.transforms_base(Xs),  self.transforms_base(Xt), same_person

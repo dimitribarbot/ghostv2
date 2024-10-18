@@ -29,6 +29,7 @@ class TrainingArguments:
     weight_eyes: float = 0                                                  # Eyes Loss weight
 
     """ Training params you may want to change """
+    face_embeddings: str = choice("facenet", "arcface", default="facenet")  # Model used for face embeddings
     backbone: str = choice("unet", "linknet", "resnet", default="unet")     # Backbone for attribute encoder
     num_blocks: int = 2                                                     # Numbers of AddBlocks at AddResblock
     same_person: float = 0.2                                                # Probability of using same person identity during training
