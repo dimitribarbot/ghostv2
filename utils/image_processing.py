@@ -1,6 +1,8 @@
+import os
 import functools
 import cv2
 import math
+import random
 from typing import cast, Any, Dict, List
 
 import torch
@@ -259,6 +261,17 @@ def get_aligned_face_and_affine_matrix(bgr_image: cv2.typing.MatLike, landmarks:
     return align_warp_face(bgr_image, landmarks, face_size=face_size)
 
 
+# Modified from https://github.com/deepinsight/insightface/blob/e896172e45157d5101448b5b9e327073073bfb1b/python-package/insightface/utils/face_align.py
+def trans_points2d(pts, M):
+    new_pts = np.zeros(shape=pts.shape, dtype=np.float32)
+    for i in range(pts.shape[0]):
+        pt = pts[i]
+        new_pt = np.array([pt[0], pt[1], 1.], dtype=np.float32)
+        new_pt = M @ new_pt
+        new_pts[i] = new_pt[0:2]
+    return new_pts
+
+
 def get_face_sort_key(face1: Dict[str, np.ndarray], face2: Dict[str, np.ndarray]):
     if face1["kps"] is None:
         if face2["kps"] is None:
@@ -360,3 +373,17 @@ def enhance_face(
     restored_face = restored_face.astype('uint8')
     
     return restored_face
+
+
+def save_image_with_landmarks(bgr_image: cv2.typing.MatLike, landmark: np.ndarray, save_path: str):
+    for point in landmark:
+        bgr_image = cv2.circle(bgr_image, (int(point[0]), int(point[1])), radius=2, color=(0, 0, 255), thickness=-1)
+    os.makedirs(os.path.dirname(save_path), exist_ok=True)
+    cv2.imwrite(save_path, bgr_image)
+
+
+def random_horizontal_flip(bgr_image: cv2.typing.MatLike):
+    random_flip = bool(random.getrandbits(1))
+    if random_flip:
+        return cv2.flip(bgr_image, 1)
+    return bgr_image

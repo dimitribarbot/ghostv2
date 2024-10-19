@@ -2,6 +2,7 @@ import os
 from dataclasses import dataclass
 from typing import List
 
+from simple_parsing import choice
 from simple_parsing.helpers import flag, list_field
 
 def make_real_path(relative_path):
@@ -34,10 +35,12 @@ class PreprocessArguments:
     min_original_image_size: int = 250
     eye_dist_threshold: int = 5
     final_crop_size: int = 224
+    align_mode: str = choice("facexlib", "insightface", "mtcnn", default="facexlib")
 
     """ Retargeting options """
     number_of_variants_per_face: int = 9
-    retargeting_do_crop: bool = flag(default=True, negative_prefix="--no-")
+    enhance_before_retargeting: bool = flag(default=False, negative_prefix="--no-")
+    retargeting_do_crop: bool = flag(default=False, negative_prefix="--no-")
     retargeting_crop_scale: float = 2.3
     save_full_size: bool = flag(default=False, negative_prefix="--no-")
     save_retargeted: bool = flag(default=False, negative_prefix="--no-")

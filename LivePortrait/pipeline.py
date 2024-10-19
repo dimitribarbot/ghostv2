@@ -238,20 +238,19 @@ class LivePortraitPipeline(object):
         self,
         img_rgb: cv2.typing.MatLike,
         original_lmks: List[np.ndarray],
+        faces_rgb: List[cv2.typing.MatLike],
         all_parameters: List[List[RetargetingParameters]],
         do_crop: bool,
         crop_scale: float,
     ):
-        if len(original_lmks) > 1 and not do_crop:
-            raise ValueError("Cannot handle multiple face when do_crop is False.")
-
-        if len(original_lmks) != len(all_parameters) or len(all_parameters) == 0:
+        if len(original_lmks) != len(all_parameters) or len(original_lmks) != len(faces_rgb) or len(all_parameters) == 0:
             return None
 
         paste_back_info: List[Tuple[np.ndarray, np.ndarray, np.ndarray]] = []
         for face_index in range(len(original_lmks)):
             original_lmk = original_lmks[face_index]
             parameters = all_parameters[face_index]
+            source_img = img_rgb if do_crop else faces_rgb[face_index]
 
             input_head_pitch_variation = torch.tensor(list(map(lambda variation: variation.input_head_pitch_variation, parameters))).to(self.device)
             input_head_yaw_variation = torch.tensor(list(map(lambda variation: variation.input_head_yaw_variation, parameters))).to(self.device)
@@ -259,7 +258,7 @@ class LivePortraitPipeline(object):
 
             f_s_user, x_s_user, R_s_user, R_d_user, x_s_info, source_lmk_user, source_eye_ratio, source_lip_ratio, crop_M_c2o, mask_ori = \
                 self.prepare_retargeting_image_multi(
-                    img_rgb, original_lmk, input_head_pitch_variation, input_head_yaw_variation, input_head_roll_variation, do_crop, crop_scale)
+                    source_img, original_lmk, input_head_pitch_variation, input_head_yaw_variation, input_head_roll_variation, do_crop, crop_scale)
             if source_lmk_user is None:
                 return None
 
