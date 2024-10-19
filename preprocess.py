@@ -2,7 +2,7 @@ import os
 import cv2
 from tqdm import tqdm
 import random
-from typing import cast, Dict, List, Tuple
+from typing import cast, Dict, List, Literal, Tuple
 import traceback
 
 from simple_parsing import ArgumentParser
@@ -32,13 +32,12 @@ def enhance_faces_in_original_image(
     rgb_image: cv2.typing.MatLike,
     lmks: np.ndarray,
     image_name: str,
-    align_mode: str,
     device: str,
 ):
     upsample_img = cv2.cvtColor(rgb_image, cv2.COLOR_RGB2BGR)
 
     for lmk in lmks:
-        cropped_face, affine_matrix = get_aligned_face_and_affine_matrix(upsample_img, lmk, 512, align_mode)
+        cropped_face, affine_matrix = get_aligned_face_and_affine_matrix(upsample_img, lmk)
         restored_face = enhance_face(gfpgan, cropped_face, image_name, device)
         upsample_img = paste_face_back(face_parser, upsample_img, restored_face, affine_matrix, device)
 
@@ -159,7 +158,7 @@ def align_and_save(
     align_mode: str,
     device: str,
     save_full_size: bool,
-    enhance_face: bool
+    should_enhance_face: bool
 ):
     if save_full_size:
         save_path = os.path.join(cropped_face_path, image_name)
@@ -167,9 +166,17 @@ def align_and_save(
     save_path_resized = os.path.join(cropped_face_path_resized, image_name)
     os.makedirs(save_path_resized, exist_ok=True)
     
-    cropped_face, _ = get_aligned_face_and_affine_matrix(bgr_image, lmk, 512, align_mode)
-    if enhance_face:
-        cropped_face = enhance_face(gfpgan, cropped_face, image_name, device)
+    if should_enhance_face:
+        if align_mode == "facexlib":
+            cropped_face, _ = get_aligned_face_and_affine_matrix(bgr_image, lmk)
+            cropped_face = enhance_face(gfpgan, cropped_face, image_name, device)
+        else:
+            cropped_face, affine_matrix = get_aligned_face_and_affine_matrix(bgr_image, lmk)
+            cropped_face = enhance_face(gfpgan, cropped_face, image_name, device)
+            transformed_lmk = trans_points2d(lmk, affine_matrix)
+            cropped_face, _ = get_aligned_face_and_affine_matrix(bgr_image, transformed_lmk, 512, align_mode)
+    else:
+        cropped_face, _ = get_aligned_face_and_affine_matrix(bgr_image, lmk, 512, align_mode)
     if save_full_size:
         cv2.imwrite(os.path.join(save_path, f"{image_index}.jpg"), cropped_face)
     cropped_face = cv2.resize(cropped_face, final_crop_size, interpolation=cv2.INTER_LINEAR)
@@ -184,7 +191,6 @@ def get_faces_from_landmarks(
     landmarks_5: List[np.ndarray],
     do_crop: bool,
     image_name: str,
-    align_mode: str,
     device: str,
 ):
     faces = []
@@ -196,7 +202,7 @@ def get_faces_from_landmarks(
             }
         else:
             landmark_5 = landmarks_5[landmark_68_index]
-            cropped_face, affine_matrix = get_aligned_face_and_affine_matrix(bgr_image, landmark_5, 512, align_mode)
+            cropped_face, affine_matrix = get_aligned_face_and_affine_matrix(bgr_image, landmark_5)
             cropped_face = enhance_face(gfpgan, cropped_face, image_name, device)
             cropped_face_landmark = trans_points2d(landmark_68, affine_matrix)
             face = {
@@ -304,7 +310,7 @@ def process(
                     kpss = [detected_face["kps"] for detected_face in detected_faces]
                     
                     if args.enhance_before_retargeting:
-                        rgb_image = enhance_faces_in_original_image(gfpgan, face_parser, rgb_image, kpss, id, args.align_mode, device)
+                        rgb_image = enhance_faces_in_original_image(gfpgan, face_parser, rgb_image, kpss, id, device)
 
                     landmarks = face_alignment.get_landmarks_from_image(
                         rgb_image,
@@ -316,7 +322,7 @@ def process(
                     
                     bgr_image = cv2.cvtColor(rgb_image, cv2.COLOR_RGB2BGR)
 
-                    faces = get_faces_from_landmarks(gfpgan, bgr_image, landmarks, kpss, args.retargeting_do_crop, id, args.align_mode, device)
+                    faces = get_faces_from_landmarks(gfpgan, bgr_image, landmarks, kpss, args.retargeting_do_crop, id, device)
 
                     retargeted_images = get_retargeted_images(
                         live_portrait_pipeline,
@@ -363,7 +369,7 @@ def process(
                                     args.align_mode,
                                     device,
                                     args.save_full_size,
-                                    enhance_face=True
+                                    should_enhance_face=True
                                 )
                     else:
                         for retargeted_face_index in range(len(retargeted_images)):
@@ -385,7 +391,7 @@ def process(
                                     args.align_mode,
                                     device,
                                     args.save_full_size,
-                                    enhance_face=False
+                                    should_enhance_face=False
                                 )
                 except Exception as ex:
                     print(f"An error occurred for sample {id}: {ex}")
