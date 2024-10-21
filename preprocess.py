@@ -379,20 +379,21 @@ def process(
                             retargeted_faces = face_detector(face_retargeted_images, threshold=0.97, return_dict=True, cv=True)
 
                             for image_index, retargeted_face in enumerate(retargeted_faces):
-                                align_and_save(
-                                    gfpgan,
-                                    face_retargeted_images[image_index],
-                                    retargeted_face[0]["kps"],
-                                    image_index,
-                                    args.final_crop_size,
-                                    cropped_face_path,
-                                    cropped_face_path_resized,
-                                    image_name,
-                                    args.align_mode,
-                                    device,
-                                    args.save_full_size,
-                                    should_enhance_face=False
-                                )
+                                if len(retargeted_face) > 0:
+                                    align_and_save(
+                                        gfpgan,
+                                        face_retargeted_images[image_index],
+                                        retargeted_face[0]["kps"],
+                                        image_index,
+                                        args.final_crop_size,
+                                        cropped_face_path,
+                                        cropped_face_path_resized,
+                                        image_name,
+                                        args.align_mode,
+                                        device,
+                                        args.save_full_size,
+                                        should_enhance_face=False
+                                    )
                 except Exception as ex:
                     print(f"An error occurred for sample {id}: {ex}")
                     traceback.print_tb(ex.__traceback__)
