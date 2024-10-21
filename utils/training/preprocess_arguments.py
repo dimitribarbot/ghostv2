@@ -14,9 +14,9 @@ class PreprocessArguments:
     """ Data arguments """
     laion_face_base_dir: str = "/home/dimitribarbot/datasets/LAION-Face"
     laion_face_part_indices: List[int] = list_field(default=[0])
-    output_dir: str = "/home/dimitribarbot/datasets/LAION-Face/laion_face_cropped_512x512_v2"
-    output_dir_resized: str = "/home/dimitribarbot/datasets/LAION-Face/laion_face_cropped_224x224_v2"
-    output_dir_retargeted: str = "/home/dimitribarbot/datasets/LAION-Face/laion_face_retargeted_data_v2"
+    output_dir: str = "/home/dimitribarbot/datasets/LAION-Face/laion_face_cropped_512x512_unaligned"
+    output_dir_resized: str = "/home/dimitribarbot/datasets/LAION-Face/laion_face_cropped_256x256"
+    output_dir_retargeted: str = "/home/dimitribarbot/datasets/LAION-Face/laion_face_retargeted_data"
 
     """ Model arguments """
     gfpgan_model_path: str = make_real_path("./weights/GFPGAN/GFPGANCleanv1-NoCE-C2.safetensors")
@@ -34,7 +34,7 @@ class PreprocessArguments:
     device_id: int = 0
     min_original_image_size: int = 250
     eye_dist_threshold: int = 5
-    final_crop_size: int = 224
+    final_crop_size: int = 256
     align_mode: str = choice("facexlib", "insightface", "mtcnn", default="facexlib")
 
     """ Retargeting options """

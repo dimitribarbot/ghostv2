@@ -170,11 +170,11 @@ def read_torch_image(path: str) -> torch.tensor:
 
 def get_face_embeddings(source: torch.Tensor, model: Any, face_embeddings: str):
     if face_embeddings == "arcface":
-        embed = model(F.interpolate(source, [112, 112], mode="bilinear", align_corners=False))
+        embed = model(F.interpolate(source, [112, 112], mode="bicubic"))
     elif face_embeddings == "adaface":
-        embed, _ = model(F.interpolate(source, [112, 112], mode="bilinear", align_corners=False))
+        embed, _ = model(F.interpolate(source, [112, 112], mode="bicubic"))
     else:
-        embed = model(F.interpolate(source, [160, 160], mode="bilinear", align_corners=False))
+        embed = model(F.interpolate(source, [160, 160], mode="bicubic"))
     return embed
 
 
@@ -211,6 +211,7 @@ def estimate_norm(lmk: np.ndarray, image_size=224):
     min_M = []
     min_index = []
     min_error = float('inf')
+    # src = face_template_src * (image_size / 512)
     src = default_template_src * (image_size / 112)
     for i in np.arange(src.shape[0]):
         tform.estimate(lmk, src[i])
@@ -313,7 +314,7 @@ def paste_face_back(
     inverse_affine = cv2.invertAffineTransform(affine_matrix)
     inv_restored = cv2.warpAffine(restored_face, inverse_affine, original_size)
 
-    face_input = cv2.resize(restored_face, (512, 512), interpolation=cv2.INTER_LINEAR)
+    face_input = cv2.resize(restored_face, (512, 512))
     face_input = img2tensor(restored_face / 255., bgr2rgb=True, float32=True)
     normalize(face_input, (0.5, 0.5, 0.5), (0.5, 0.5, 0.5), inplace=True)
     face_input = face_input.unsqueeze(0).to(device)

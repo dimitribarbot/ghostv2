@@ -204,9 +204,9 @@ class GhostV2Module(L.LightningModule):
             if self.args.scheduler_type == "one_cycle":
                 total_steps = self.trainer.estimated_stepping_batches if self.args.scheduler_total_steps == -1 else self.args.scheduler_total_steps
                 print(f"Using OneCycleLR scheduler with max_lr_G={self.args.lr_G} and total_steps={total_steps} for G.")
-                scheduler_G = scheduler.OneCycleLR(opt_G, max_lr=self.args.lr_G, total_steps=total_steps)
+                scheduler_G = scheduler.OneCycleLR(opt_G, max_lr=self.args.lr_G, total_steps=total_steps, last_epoch=self.args.scheduler_last_batches)
                 print(f"Using OneCycleLR scheduler with max_lr_D={self.args.lr_D} and total_steps={total_steps} for D.")
-                scheduler_D = scheduler.OneCycleLR(opt_D, max_lr=self.args.lr_D, total_steps=total_steps)
+                scheduler_D = scheduler.OneCycleLR(opt_D, max_lr=self.args.lr_D, total_steps=total_steps, last_epoch=self.args.scheduler_last_batches)
             else:
                 print(f"Using StepLR scheduler with step_size={self.args.scheduler_step} and gamma={self.args.scheduler_gamma} for G and D.")
                 scheduler_G = scheduler.StepLR(opt_G, step_size=self.args.scheduler_step, gamma=self.args.scheduler_gamma)
@@ -290,13 +290,19 @@ class GhostV2LoggingCallback(L.Callback):
     
 
 class GhostV2CheckpointCallback(L.Callback):
-    def on_train_batch_end(self, trainer, pl_module: GhostV2Module, outputs, batch, batch_idx):
-        if (trainer.current_epoch > 0 or batch_idx > 0) and batch_idx % 25000 == 0:
-            save_file(pl_module.G.state_dict(), f"./experiments/saved_models_{pl_module.args.run_name}/G_latest.safetensors")
-            save_file(pl_module.D.state_dict(), f"./experiments/saved_models_{pl_module.args.run_name}/D_latest.safetensors")
+    def save_models(self, pl_module: GhostV2Module, epoch: int, batch_idx: int = 0):
+        save_file(pl_module.G.state_dict(), f"./experiments/saved_models_{pl_module.args.run_name}/G_latest.safetensors")
+        save_file(pl_module.D.state_dict(), f"./experiments/saved_models_{pl_module.args.run_name}/D_latest.safetensors")
 
-            save_file(pl_module.G.state_dict(), f"./experiments/current_models_{pl_module.args.run_name}/G_{str(pl_module.current_epoch)}_{batch_idx:06}.safetensors")
-            save_file(pl_module.D.state_dict(), f"./experiments/current_models_{pl_module.args.run_name}/D_{str(pl_module.current_epoch)}_{batch_idx:06}.safetensors")
+        save_file(pl_module.G.state_dict(), f"./experiments/current_models_{pl_module.args.run_name}/G_{str(epoch)}_{batch_idx:06}.safetensors")
+        save_file(pl_module.D.state_dict(), f"./experiments/current_models_{pl_module.args.run_name}/D_{str(epoch)}_{batch_idx:06}.safetensors")
+
+    def on_train_epoch_end(self, trainer, pl_module: GhostV2Module):
+        self.save_models(pl_module, pl_module.current_epoch + 1)
+
+    def on_train_batch_end(self, trainer, pl_module: GhostV2Module, outputs, batch, batch_idx):
+        if batch_idx > 0 and batch_idx % 25000 == 0:
+            self.save_models(pl_module, pl_module.current_epoch, batch_idx)
     
 
 class GhostV2WandbCallback(L.Callback):

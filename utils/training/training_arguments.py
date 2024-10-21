@@ -42,6 +42,7 @@ class TrainingArguments:
     scheduler_step: int = 5000                                              # Parameter for StepLR scheduler
     scheduler_gamma: float = 0.2                                            # Parameter for StepLR scheduler, value which shows how many times to decrease LR
     scheduler_total_steps: int = -1                                         # Parameter for OneCycleLR scheduler, leave to -1 to automatically compute it from max_epoch
+    scheduler_last_batches: int = -1                                        # Parameter for OneCycleLR scheduler, leave to -1 to start from scratch
     eye_detector_loss: bool = flag(default=False, negative_prefix="--no-")  # If True eye loss with using AdaptiveWingLoss detector is applied to generator
 
     """ W&B logging """

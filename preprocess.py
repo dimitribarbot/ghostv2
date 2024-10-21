@@ -165,21 +165,23 @@ def align_and_save(
         os.makedirs(save_path, exist_ok=True)
     save_path_resized = os.path.join(cropped_face_path_resized, image_name)
     os.makedirs(save_path_resized, exist_ok=True)
+
+    if save_full_size:
+        cv2.imwrite(os.path.join(save_path, f"{image_index}.jpg"), bgr_image)
     
     if should_enhance_face:
         if align_mode == "facexlib":
             cropped_face, _ = get_aligned_face_and_affine_matrix(bgr_image, lmk)
             cropped_face = enhance_face(gfpgan, cropped_face, image_name, device)
+            cropped_face = cv2.resize(cropped_face, (final_crop_size, final_crop_size), interpolation=cv2.INTER_CUBIC)
         else:
             cropped_face, affine_matrix = get_aligned_face_and_affine_matrix(bgr_image, lmk)
             cropped_face = enhance_face(gfpgan, cropped_face, image_name, device)
             transformed_lmk = trans_points2d(lmk, affine_matrix)
-            cropped_face, _ = get_aligned_face_and_affine_matrix(bgr_image, transformed_lmk, 512, align_mode)
+            cropped_face, _ = get_aligned_face_and_affine_matrix(bgr_image, transformed_lmk, final_crop_size, align_mode)
     else:
-        cropped_face, _ = get_aligned_face_and_affine_matrix(bgr_image, lmk, 512, align_mode)
-    if save_full_size:
-        cv2.imwrite(os.path.join(save_path, f"{image_index}.jpg"), cropped_face)
-    cropped_face = cv2.resize(cropped_face, final_crop_size, interpolation=cv2.INTER_LINEAR)
+        cropped_face, _ = get_aligned_face_and_affine_matrix(bgr_image, lmk, final_crop_size, align_mode)
+
     cv2.imwrite(os.path.join(save_path_resized, f"{image_index}.jpg"), cropped_face)
 
 
@@ -267,8 +269,6 @@ def process(
     output_dir_resized = args.output_dir_resized
 
     laion_data_dir = os.path.join(laion_face_base_dir, "laion_face_data")
-
-    final_crop_size = (args.final_crop_size, args.final_crop_size)
 
     for laion_face_part_index in args.laion_face_part_indices:
         split_folder = f"split_{laion_face_part_index:05d}"
@@ -362,7 +362,7 @@ def process(
                                     retargeted_image,
                                     retargeted_face["kps"],
                                     image_index,
-                                    final_crop_size,
+                                    args.final_crop_size,
                                     cropped_face_path,
                                     cropped_face_path_resized,
                                     image_name,
@@ -384,7 +384,7 @@ def process(
                                     face_retargeted_images[image_index],
                                     retargeted_face[0]["kps"],
                                     image_index,
-                                    final_crop_size,
+                                    args.final_crop_size,
                                     cropped_face_path,
                                     cropped_face_path_resized,
                                     image_name,
