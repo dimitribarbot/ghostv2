@@ -2,10 +2,13 @@ import torch
 import torch.nn as nn
 import torchvision.models._utils as _utils
 import torch.nn.functional as F
+
+from CVLFace.timm import MixerBlock
+
 from .net import MobileNetV1 as MobileNetV1
 from .net import FPN as FPN
 from .net import SSH as SSH
-from .timm import MixerBlock
+
 
 class ClassHead(nn.Module):
     def __init__(self,inchannels=512,num_anchors=3):

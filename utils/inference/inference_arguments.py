@@ -21,7 +21,7 @@ class InferenceArguments:
     face_parser_model_path: str = make_real_path("./weights/BiSeNet/79999_iter.safetensors")
     retina_face_model_path: str = make_real_path("./weights/RetinaFace/Resnet50_Final.safetensors")
     cvlface_aligner_model_path: str = make_real_path("./weights/CVLFace/cvlface_DFA_mobilenet.safetensors")
-    face_embeddings: str = choice("facenet", "arcface", "adaface", default="facenet")
+    face_embeddings: str = choice("facenet", "arcface", "adaface", "vit", default="facenet")
     backbone: str = choice("unet", "linknet", "resnet", default="unet")
     num_blocks: int = 2
     precision: Optional[str] = choice(
