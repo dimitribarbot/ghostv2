@@ -176,13 +176,8 @@ def convert_to_batch_tensor(bgr_image: cv2.typing.MatLike, device: torch.device)
 
 
 def get_face_embeddings(source: torch.Tensor, model: Any, face_embeddings: str):
-    if face_embeddings == "arcface":
-        embed = model(F.interpolate(source, [112, 112], mode="bicubic"))
-    elif face_embeddings == "adaface":
-        embed, _ = model(F.interpolate(source, [112, 112], mode="bicubic"))
-    else:
-        embed = model(F.interpolate(source, [160, 160], mode="bicubic"))
-    return embed
+    model_size = [112, 112] if face_embeddings == "arcface" or face_embeddings == "adaface" else [160, 160]
+    return model(F.interpolate(source, model_size, mode="bicubic"))
 
 
 def get_faceswap(source_path: str,

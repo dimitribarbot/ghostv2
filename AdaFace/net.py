@@ -11,17 +11,17 @@ from torch.nn import Module
 from torch.nn import PReLU
 
 
-def build_model(model_name='ir_50'):
+def build_model(model_name='ir_50', with_norm=True):
     if model_name == 'ir_101':
-        return IR_101(input_size=(112,112))
+        return IR_101(input_size=(112,112), with_norm=with_norm)
     elif model_name == 'ir_50':
-        return IR_50(input_size=(112,112))
+        return IR_50(input_size=(112,112), with_norm=with_norm)
     elif model_name == 'ir_se_50':
-        return IR_SE_50(input_size=(112,112))
+        return IR_SE_50(input_size=(112,112), with_norm=with_norm)
     elif model_name == 'ir_34':
-        return IR_34(input_size=(112,112))
+        return IR_34(input_size=(112,112), with_norm=with_norm)
     elif model_name == 'ir_18':
-        return IR_18(input_size=(112,112))
+        return IR_18(input_size=(112,112), with_norm=with_norm)
     else:
         raise ValueError('not a correct model name', model_name)
 
@@ -63,49 +63,6 @@ class LinearBlock(Module):
 
     def forward(self, x):
         x = self.conv(x)
-        x = self.bn(x)
-        return x
-
-
-class GNAP(Module):
-    """ Global Norm-Aware Pooling block
-    """
-    def __init__(self, in_c):
-        super(GNAP, self).__init__()
-        self.bn1 = BatchNorm2d(in_c, affine=False)
-        self.pool = nn.AdaptiveAvgPool2d((1, 1))
-        self.bn2 = BatchNorm1d(in_c, affine=False)
-
-    def forward(self, x):
-        x = self.bn1(x)
-        x_norm = torch.norm(x, 2, 1, True)
-        x_norm_mean = torch.mean(x_norm)
-        weight = x_norm_mean / x_norm
-        x = x * weight
-        x = self.pool(x)
-        x = x.view(x.shape[0], -1)
-        feature = self.bn2(x)
-        return feature
-
-
-class GDC(Module):
-    """ Global Depthwise Convolution block
-    """
-    def __init__(self, in_c, embedding_size):
-        super(GDC, self).__init__()
-        self.conv_6_dw = LinearBlock(in_c, in_c,
-                                     groups=in_c,
-                                     kernel=(7, 7),
-                                     stride=(1, 1),
-                                     padding=(0, 0))
-        self.conv_6_flatten = Flatten()
-        self.linear = Linear(in_c, embedding_size, bias=False)
-        self.bn = BatchNorm1d(embedding_size, affine=False)
-
-    def forward(self, x):
-        x = self.conv_6_dw(x)
-        x = self.conv_6_flatten(x)
-        x = self.linear(x)
         x = self.bn(x)
         return x
 
@@ -265,7 +222,7 @@ def get_blocks(num_layers):
 
 
 class Backbone(Module):
-    def __init__(self, input_size, num_layers, mode='ir'):
+    def __init__(self, input_size, num_layers, mode='ir', flip=False, output_dim=512, with_norm=False):
         """ Args:
             input_size: input_size of backbone
             num_layers: num_layers of backbone
@@ -297,13 +254,13 @@ class Backbone(Module):
         if input_size[0] == 112:
             self.output_layer = Sequential(BatchNorm2d(output_channel),
                                         Dropout(0.4), Flatten(),
-                                        Linear(output_channel * 7 * 7, 512),
-                                        BatchNorm1d(512, affine=False))
+                                        Linear(output_channel * 7 * 7, output_dim),
+                                        BatchNorm1d(output_dim, affine=False))
         else:
             self.output_layer = Sequential(
                 BatchNorm2d(output_channel), Dropout(0.4), Flatten(),
-                Linear(output_channel * 14 * 14, 512),
-                BatchNorm1d(512, affine=False))
+                Linear(output_channel * 14 * 14, output_dim),
+                BatchNorm1d(output_dim, affine=False))
 
         modules = []
         for block in blocks:
@@ -315,9 +272,14 @@ class Backbone(Module):
 
         initialize_weights(self.modules())
 
+        self.flip = flip
+        self.with_norm = with_norm
+
 
     def forward(self, x):
-        
+        if self.flip:
+            x = x.flip(1) # color channel flip
+
         # current code only supports one extra image
         # it comes with a extra dimension for number of extra image. We will just squeeze it out for now
         x = self.input_layer(x)
@@ -326,88 +288,97 @@ class Backbone(Module):
             x = module(x)
 
         x = self.output_layer(x)
-        norm = torch.norm(x, 2, 1, True)
-        output = torch.div(x, norm)
+        if self.with_norm:
+            norm = torch.norm(x, 2, 1, True)
+            output = torch.div(x, norm)
+            return output
+        return x
 
-        return output, norm
 
 
-
-def IR_18(input_size):
+def IR_18(input_size, output_dim=512, with_norm=False):
     """ Constructs a ir-18 model.
     """
-    model = Backbone(input_size, 18, 'ir')
+    model = Backbone(input_size, 18, 'ir', output_dim=output_dim, with_norm=with_norm)
 
     return model
 
 
-def IR_34(input_size):
+def IR_34(input_size, output_dim=512, with_norm=False):
     """ Constructs a ir-34 model.
     """
-    model = Backbone(input_size, 34, 'ir')
+    model = Backbone(input_size, 34, 'ir', output_dim=output_dim, with_norm=with_norm)
 
     return model
 
 
-def IR_50(input_size):
+def IR_50(input_size, output_dim=512, with_norm=False):
     """ Constructs a ir-50 model.
     """
-    model = Backbone(input_size, 50, 'ir')
+    model = Backbone(input_size, 50, 'ir', output_dim=output_dim, with_norm=with_norm)
 
     return model
 
 
-def IR_101(input_size):
+def IR_101(input_size, output_dim=512, with_norm=False):
     """ Constructs a ir-101 model.
     """
-    model = Backbone(input_size, 100, 'ir')
+    model = Backbone(input_size, 100, 'ir', output_dim=output_dim, with_norm=with_norm)
 
     return model
 
 
-def IR_152(input_size):
+def IR_101_FLIP(input_size, output_dim=512, with_norm=False):
+    """ Constructs a ir-101 model using bgr inputs.
+    """
+    model = Backbone(input_size, 100, 'ir', flip=True, output_dim=output_dim, with_norm=with_norm)
+
+    return model
+
+
+def IR_152(input_size, output_dim=512, with_norm=False):
     """ Constructs a ir-152 model.
     """
-    model = Backbone(input_size, 152, 'ir')
+    model = Backbone(input_size, 152, 'ir', output_dim=output_dim, with_norm=with_norm)
 
     return model
 
 
-def IR_200(input_size):
+def IR_200(input_size, output_dim=512, with_norm=False):
     """ Constructs a ir-200 model.
     """
-    model = Backbone(input_size, 200, 'ir')
+    model = Backbone(input_size, 200, 'ir', output_dim=output_dim, with_norm=with_norm)
 
     return model
 
 
-def IR_SE_50(input_size):
+def IR_SE_50(input_size, output_dim=512, with_norm=False):
     """ Constructs a ir_se-50 model.
     """
-    model = Backbone(input_size, 50, 'ir_se')
+    model = Backbone(input_size, 50, 'ir_se', output_dim=output_dim, with_norm=with_norm)
 
     return model
 
 
-def IR_SE_101(input_size):
+def IR_SE_101(input_size, output_dim=512, with_norm=False):
     """ Constructs a ir_se-101 model.
     """
-    model = Backbone(input_size, 100, 'ir_se')
+    model = Backbone(input_size, 100, 'ir_se', output_dim=output_dim, with_norm=with_norm)
 
     return model
 
 
-def IR_SE_152(input_size):
+def IR_SE_152(input_size, output_dim=512, with_norm=False):
     """ Constructs a ir_se-152 model.
     """
-    model = Backbone(input_size, 152, 'ir_se')
+    model = Backbone(input_size, 152, 'ir_se', output_dim=output_dim, with_norm=with_norm)
 
     return model
 
 
-def IR_SE_200(input_size):
+def IR_SE_200(input_size, output_dim=512, with_norm=False):
     """ Constructs a ir_se-200 model.
     """
-    model = Backbone(input_size, 200, 'ir_se')
+    model = Backbone(input_size, 200, 'ir_se', output_dim=output_dim, with_norm=with_norm)
 
     return model

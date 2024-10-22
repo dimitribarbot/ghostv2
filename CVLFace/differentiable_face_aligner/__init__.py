@@ -5,8 +5,8 @@ import numpy as np
 from CVLFace.differentiable_face_aligner.dfa.layers.functions.prior_box import PriorBox
 from CVLFace.differentiable_face_aligner.dfa.models.retinaface import RetinaFace
 from CVLFace.differentiable_face_aligner.dfa.preprocessor import Preprocessor
+from CVLFace.utils import get_parameter_device, get_parameter_dtype
 
-from .utils import get_parameter_device, get_parameter_dtype
 from . import aligner_helper
 
 
