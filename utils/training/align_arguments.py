@@ -8,7 +8,7 @@ def make_real_path(relative_path):
     return os.path.join(os.path.dirname(os.path.realpath(__file__)), "../..", relative_path)
 
 @dataclass
-class ExampleArguments:
+class AlignArguments:
 
     """ Data arguments """
     source_image: Optional[str] = None

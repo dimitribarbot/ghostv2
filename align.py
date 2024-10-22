@@ -2,6 +2,7 @@ import os
 from typing import cast, Optional
 
 from simple_parsing import ArgumentParser
+from tqdm import tqdm
 
 import cv2
 import torch
@@ -9,11 +10,12 @@ import torch
 from CVLFace import get_aligner
 from CVLFace.differentiable_face_aligner import DifferentiableFaceAligner
 from RetinaFace.detector import RetinaFace
-from utils.training.example_arguments import ExampleArguments
+from utils.training.align_arguments import AlignArguments
 from utils.image_processing import get_aligned_face_and_affine_matrix
 
 
 def process_one_image(
+    root_folder: str,
     source_image: str,
     aligned_folder: str,
     face_detector: RetinaFace,
@@ -22,16 +24,18 @@ def process_one_image(
     aligner: Optional[DifferentiableFaceAligner],
     device: Optional[torch.device]=None,
 ):
-    print(f"Processing image {source_image}.")
     image = cv2.imread(source_image, cv2.IMREAD_COLOR)
     image_name = os.path.splitext(os.path.basename(source_image))[0]
 
-    save_path = os.path.join(aligned_folder, f"{image_name}.png")
-    os.makedirs(aligned_folder, exist_ok=True)
+    relative_path = os.path.relpath(os.path.dirname(source_image), root_folder)
+
+    save_folder = os.path.join(aligned_folder, relative_path)
+    save_path = os.path.join(save_folder, f"{image_name}.png")
+    os.makedirs(save_folder, exist_ok=True)
 
     detected_faces = face_detector(image, threshold=0.97, return_dict=True, cv=True)
     if len(detected_faces) == 0:
-        raise ValueError(f"No face detected in source image {source_image}.")
+        return None
 
     cropped_face, _ = get_aligned_face_and_affine_matrix(
         image,
@@ -42,8 +46,9 @@ def process_one_image(
         device
     )
 
-    print(f"Saving cropped face to {save_path}.")
     cv2.imwrite(save_path, cropped_face)
+
+    return save_path
 
 
 def process(
@@ -62,27 +67,50 @@ def process(
     if source_folder is None:
         if not os.path.exists(source_image):
             raise ValueError(f"Arguments 'source_image' {source_image} points to a file that does not exist.")
+        
+        root_folder = os.path.dirname(source_image)
 
-        process_one_image(source_image, aligned_folder, face_detector, final_crop_size, align_mode, aligner, device)
+        print(f"Processing image {source_image}.")
+        save_path = process_one_image(
+            root_folder,
+            source_image,
+            aligned_folder,
+            face_detector,
+            final_crop_size,
+            align_mode,
+            aligner,
+            device
+        )
+        if save_path is not None:
+            print(f"Saving cropped face to {save_path}.")
+        else:
+            print(f"No face detected in source image {source_image}.")
     else:
         if not os.path.exists(source_folder):
             raise ValueError(f"Arguments 'source_folder' {source_folder} points to a folder that does not exist.")
     
-        print(f"Processing images in folder {source_folder}.")        
-        for dirpath, _, source_folder_images in os.walk(source_folder):
-            for source_folder_image in source_folder_images:
-                process_one_image(
-                    os.path.join(dirpath, source_folder_image),
-                    aligned_folder,
-                    face_detector,
-                    final_crop_size,
-                    align_mode,
-                    aligner,
-                    device
-                )
+        print(f"Processing images in folder {source_folder}.")
+        total = sum([len(files) for _, _, files in os.walk(source_folder)])
+        with tqdm(total=total) as pbar:
+            for root, _, files in os.walk(source_folder):
+                for file in files:
+                    source_image = os.path.join(root, file)
+                    save_path = process_one_image(
+                        source_folder,
+                        source_image,
+                        aligned_folder,
+                        face_detector,
+                        final_crop_size,
+                        align_mode,
+                        aligner,
+                        device
+                    )
+                    if save_path is None:
+                        print(f"No face detected in source image {source_image}.")
+                    pbar.update()
 
 
-def main(args: ExampleArguments):
+def main(args: AlignArguments):
     try:
         if torch.backends.mps.is_available():
             device = "mps"
@@ -120,7 +148,7 @@ def main(args: ExampleArguments):
 
 if __name__ == "__main__":
     parser = ArgumentParser()
-    parser.add_arguments(ExampleArguments, dest="arguments")
-    args = cast(ExampleArguments, parser.parse_args().arguments)
+    parser.add_arguments(AlignArguments, dest="arguments")
+    args = cast(AlignArguments, parser.parse_args().arguments)
     
     main(args)
