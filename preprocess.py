@@ -2,7 +2,7 @@ import os
 import cv2
 from tqdm import tqdm
 import random
-from typing import cast, Dict, List, Literal, Tuple
+from typing import cast, Dict, List, Optional, Tuple
 import traceback
 
 from simple_parsing import ArgumentParser
@@ -15,6 +15,8 @@ from safetensors.torch import load_file
 import numpy as np
 
 from BiSeNet.bisenet import BiSeNet
+from CVLFace import get_aligner
+from CVLFace.differentiable_face_aligner import DifferentiableFaceAligner
 from GFPGAN.gfpganv1_clean_arch import GFPGANv1Clean
 from LivePortrait.pipeline import LivePortraitPipeline, RetargetingParameters
 from LivePortrait.utils.io import contiguous, resize_to_limit
@@ -156,6 +158,7 @@ def align_and_save(
     cropped_face_path_resized: str,
     image_name: str,
     align_mode: str,
+    aligner: Optional[DifferentiableFaceAligner],
     device: str,
     save_full_size: bool,
     should_enhance_face: bool
@@ -178,9 +181,9 @@ def align_and_save(
             cropped_face, affine_matrix = get_aligned_face_and_affine_matrix(bgr_image, lmk)
             cropped_face = enhance_face(gfpgan, cropped_face, image_name, device)
             transformed_lmk = trans_points2d(lmk, affine_matrix)
-            cropped_face, _ = get_aligned_face_and_affine_matrix(bgr_image, transformed_lmk, final_crop_size, align_mode)
+            cropped_face, _ = get_aligned_face_and_affine_matrix(bgr_image, transformed_lmk, final_crop_size, align_mode, aligner, device)
     else:
-        cropped_face, _ = get_aligned_face_and_affine_matrix(bgr_image, lmk, final_crop_size, align_mode)
+        cropped_face, _ = get_aligned_face_and_affine_matrix(bgr_image, lmk, final_crop_size, align_mode, aligner, device)
 
     cv2.imwrite(os.path.join(save_path_resized, f"{image_index}.jpg"), cropped_face)
 
@@ -261,6 +264,7 @@ def process(
     live_portrait_pipeline: LivePortraitPipeline,
     gfpgan: GFPGANv1Clean,
     face_parser: BiSeNet,
+    aligner: Optional[DifferentiableFaceAligner],
     args: PreprocessArguments,
     device: str
 ):
@@ -367,6 +371,7 @@ def process(
                                     cropped_face_path_resized,
                                     image_name,
                                     args.align_mode,
+                                    aligner,
                                     device,
                                     args.save_full_size,
                                     should_enhance_face=True
@@ -390,6 +395,7 @@ def process(
                                         cropped_face_path_resized,
                                         image_name,
                                         args.align_mode,
+                                        aligner,
                                         device,
                                         args.save_full_size,
                                         should_enhance_face=False
@@ -461,12 +467,17 @@ def main(args: PreprocessArguments):
         device
     )
 
+    aligner = None
+    if args.align_mode == "cvlface":
+        aligner = get_aligner(args.cvlface_aligner_model_path, device)
+
     process(
         face_detector,
         face_alignment,
         live_portrait_pipeline,
         gfpgan,
         face_parser,
+        aligner,
         args,
         device
     )

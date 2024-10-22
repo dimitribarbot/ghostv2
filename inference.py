@@ -15,9 +15,10 @@ import lightning as L
 from network.AEI_Net import *
 from network.MultiscaleDiscriminator import *
 from utils.inference.inference_arguments import InferenceArguments
-from utils.image_processing import get_face_embeddings, img2tensor, \
+from utils.image_processing import get_face_embeddings, convert_to_batch_tensor, \
     torch2image, paste_face_back, enhance_face, sort_faces_by_coordinates, get_aligned_face_and_affine_matrix
 from utils.inference.Dataset import FaceEmbed
+from CVLFace import get_aligner
 from BiSeNet.bisenet import BiSeNet
 from GFPGAN.gfpganv1_clean_arch import GFPGANv1Clean
 from RetinaFace.detector import RetinaFace
@@ -113,6 +114,10 @@ class GhostV2Module(L.LightningModule):
             model_path=args.retina_face_model_path
         )
 
+        self.aligner = None
+        if args.align_mode == "cvlface":
+            self.aligner = get_aligner(args.cvlface_aligner_model_path)
+
     
     def predict_step(self, batch):
         print("Running predict step.")
@@ -140,16 +145,13 @@ class GhostV2Module(L.LightningModule):
         Xs_face_kps = Xs_detected_faces[self.source_face_index]["kps"]
         Xt_face_kps = Xt_detected_faces[self.target_face_index]["kps"]
 
-        Xs_face, _ = get_aligned_face_and_affine_matrix(Xs_image, Xs_face_kps, face_size=256, align_mode=self.align_mode)
-        Xt_face, Xt_affine_matrix = get_aligned_face_and_affine_matrix(Xt_image, Xt_face_kps, face_size=256, align_mode=self.align_mode)
+        Xs_face, _ = get_aligned_face_and_affine_matrix(
+            Xs_image, Xs_face_kps, face_size=256, align_mode=self.align_mode, aligner=self.aligner, device=self.device)
+        Xt_face, Xt_affine_matrix = get_aligned_face_and_affine_matrix(
+            Xt_image, Xt_face_kps, face_size=256, align_mode=self.align_mode, aligner=self.aligner, device=self.device)
 
-        Xs_face = img2tensor(Xs_face / 255., bgr2rgb=True, float32=True)
-        normalize(Xs_face, (0.5, 0.5, 0.5), (0.5, 0.5, 0.5), inplace=True)
-        Xs_face = Xs_face.unsqueeze(0).to(self.device)
-
-        Xt_face = img2tensor(Xt_face / 255., bgr2rgb=True, float32=True)
-        normalize(Xt_face, (0.5, 0.5, 0.5), (0.5, 0.5, 0.5), inplace=True)
-        Xt_face = Xt_face.unsqueeze(0).to(self.device)
+        Xs_face = convert_to_batch_tensor(Xs_face, self.device)
+        Xt_face = convert_to_batch_tensor(Xt_face, self.device)
 
         with torch.no_grad():
             Xs_embed = get_face_embeddings(Xs_face, self.embedding_model, self.face_embeddings)

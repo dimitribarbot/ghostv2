@@ -23,6 +23,7 @@ class PreprocessArguments:
     face_parser_model_path: str = make_real_path("./weights/BiSeNet/79999_iter.safetensors")
     retina_face_model_path: str = make_real_path("./weights/RetinaFace/Resnet50_Final.safetensors")
     face_alignment_model_path: str = make_real_path("./weights/FaceAlignment/s3fd-619a316812.safetensors")
+    cvlface_aligner_model_path: str = make_real_path("./weights/CVLFace/cvlface_DFA_mobilenet.safetensors")
     live_portrait_landmark_model_path: str = make_real_path("./weights/LivePortrait/landmark_model.pth")
     live_portrait_F_model_path: str = make_real_path("./weights/LivePortrait/appearance_feature_extractor.safetensors")
     live_portrait_M_model_path: str = make_real_path("./weights/LivePortrait/motion_extractor.safetensors")
@@ -35,7 +36,7 @@ class PreprocessArguments:
     min_original_image_size: int = 250
     eye_dist_threshold: int = 5
     final_crop_size: int = 256
-    align_mode: str = choice("facexlib", "insightface", "mtcnn", default="facexlib")
+    align_mode: str = choice("facexlib", "insightface", "mtcnn", "cvlface", default="facexlib")
 
     """ Retargeting options """
     number_of_variants_per_face: int = 9

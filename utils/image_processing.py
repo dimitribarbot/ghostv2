@@ -3,7 +3,7 @@ import functools
 import cv2
 import math
 import random
-from typing import cast, Any, Dict, List
+from typing import cast, Any, Dict, List, Optional
 
 import torch
 import torch.nn.functional as F
@@ -16,11 +16,12 @@ from PIL import Image
 from skimage import transform as trans
 
 from BiSeNet.bisenet import BiSeNet
+from CVLFace.differentiable_face_aligner import DifferentiableFaceAligner
 from GFPGAN.gfpganv1_clean_arch import GFPGANv1Clean
 from utils.adaface_align_trans import get_reference_facial_points, warp_and_crop_face
 
 
-transformer_Facenet = transforms.Compose([
+transformer_embeddings = transforms.Compose([
     transforms.ToTensor(),
     transforms.Normalize([0.5, 0.5, 0.5], [0.5, 0.5, 0.5])
 ])
@@ -162,10 +163,16 @@ def read_torch_image(path: str) -> torch.tensor:
     image = cv2.imread(path)
     image = cv2.resize(image, (256, 256))
     image = Image.fromarray(image[:, :, ::-1])
-    image = transformer_Facenet(image)
+    image = transformer_embeddings(image)
     image = image.view(-1, image.shape[0], image.shape[1], image.shape[2])
     
     return image
+
+
+def convert_to_batch_tensor(bgr_image: cv2.typing.MatLike, device: torch.device):
+    input = img2tensor(bgr_image / 255., bgr2rgb=True, float32=True)
+    normalize(input, (0.5, 0.5, 0.5), (0.5, 0.5, 0.5), inplace=True)
+    return input.unsqueeze(0).to(device)
 
 
 def get_face_embeddings(source: torch.Tensor, model: Any, face_embeddings: str):
@@ -254,11 +261,44 @@ def get_aligned_face(bgr_image: cv2.typing.MatLike, landmarks: np.ndarray, face_
     return warp_and_crop_face(bgr_image, landmarks, adaface_reference, crop_size=(face_size, face_size))
 
 
-def get_aligned_face_and_affine_matrix(bgr_image: cv2.typing.MatLike, landmarks: np.ndarray, face_size=512, align_mode="facexlib"):
+def get_cvl_aligned_face(
+    bgr_image: cv2.typing.MatLike,
+    landmarks: np.ndarray,
+    face_size=512,
+    aligner: Optional[DifferentiableFaceAligner]=None,
+    device: Optional[torch.device]=None,
+):
+    if aligner is None:
+        raise ValueError("CVL Face aligner is not optional.")
+    if device is None:
+        raise ValueError("CVL Face device is not optional.")
+    
+    input, M1 = align_warp_face(bgr_image, landmarks, face_size=face_size)
+    
+    _, _, _, _, _, _, cv2_tfms = aligner(convert_to_batch_tensor(input, device), output_size=face_size)
+    M2 = cv2_tfms.squeeze()
+
+    affine_matrix = np.matmul(np.vstack([M2, [0, 0, 1]]), np.vstack([M1, [0, 0, 1]]))[:2]
+
+    output = cv2.warpAffine(bgr_image, affine_matrix, (face_size, face_size), borderValue=0.0)
+
+    return output, affine_matrix
+
+
+def get_aligned_face_and_affine_matrix(
+    bgr_image: cv2.typing.MatLike,
+    landmarks: np.ndarray,
+    face_size=512,
+    align_mode="facexlib",
+    aligner: Optional[DifferentiableFaceAligner] = None,
+    device: Optional[torch.device]=None,
+):
     if align_mode == "insightface":
         return norm_crop(bgr_image, landmarks, face_size=face_size)
     elif align_mode == "mtcnn":
         return get_aligned_face(bgr_image, landmarks, face_size=face_size)
+    elif align_mode == "cvlface":
+        return get_cvl_aligned_face(bgr_image, landmarks, face_size=face_size, aligner=aligner, device=device)
     return align_warp_face(bgr_image, landmarks, face_size=face_size)
 
 
@@ -315,9 +355,7 @@ def paste_face_back(
     inv_restored = cv2.warpAffine(restored_face, inverse_affine, original_size)
 
     face_input = cv2.resize(restored_face, (512, 512))
-    face_input = img2tensor(restored_face / 255., bgr2rgb=True, float32=True)
-    normalize(face_input, (0.5, 0.5, 0.5), (0.5, 0.5, 0.5), inplace=True)
-    face_input = face_input.unsqueeze(0).to(device)
+    face_input = convert_to_batch_tensor(restored_face, device)
 
     with torch.no_grad():
         out = cast(torch.Tensor, face_parser(face_input)[0])
@@ -360,9 +398,7 @@ def enhance_face(
     device: torch.device,
     weight=0.5
 ):
-    cropped_face_t = img2tensor(img_bgr / 255., bgr2rgb=True, float32=True)
-    normalize(cropped_face_t, (0.5, 0.5, 0.5), (0.5, 0.5, 0.5), inplace=True)
-    cropped_face_t = cropped_face_t.unsqueeze(0).to(device)
+    cropped_face_t = convert_to_batch_tensor(img_bgr, device)
 
     try:
         output = cast(torch.Tensor, gfpgan(cropped_face_t, return_rgb=False, weight=weight)[0])
