@@ -14,10 +14,17 @@ from utils.training.align_arguments import AlignArguments
 from utils.image_processing import get_aligned_face_and_affine_matrix
 
 
+def get_save_path(root_folder: str, source_image: str, aligned_folder: str):
+    image_name = os.path.splitext(os.path.basename(source_image))[0]
+    relative_path = os.path.relpath(os.path.dirname(source_image), root_folder)
+    save_folder = os.path.join(aligned_folder, relative_path)
+    save_path = os.path.join(save_folder, f"{image_name}.png")
+    return save_path
+
+
 def process_one_image(
-    root_folder: str,
     source_image: str,
-    aligned_folder: str,
+    save_path: str,
     face_detector: RetinaFace,
     final_crop_size: int,
     align_mode: str,
@@ -25,13 +32,8 @@ def process_one_image(
     device: Optional[torch.device]=None,
 ):
     image = cv2.imread(source_image, cv2.IMREAD_COLOR)
-    image_name = os.path.splitext(os.path.basename(source_image))[0]
 
-    relative_path = os.path.relpath(os.path.dirname(source_image), root_folder)
-
-    save_folder = os.path.join(aligned_folder, relative_path)
-    save_path = os.path.join(save_folder, f"{image_name}.png")
-    os.makedirs(save_folder, exist_ok=True)
+    os.makedirs(os.path.dirname(save_path), exist_ok=True)
 
     detected_faces = face_detector(image, threshold=0.97, return_dict=True, cv=True)
     if len(detected_faces) == 0:
@@ -57,6 +59,7 @@ def process(
     aligned_folder: str,
     face_detector: RetinaFace,
     final_crop_size: int,
+    overwrite: bool,
     align_mode: str,
     aligner: Optional[DifferentiableFaceAligner],
     device: Optional[torch.device]=None,
@@ -69,45 +72,51 @@ def process(
             raise ValueError(f"Arguments 'source_image' {source_image} points to a file that does not exist.")
         
         root_folder = os.path.dirname(source_image)
-
-        print(f"Processing image {source_image}.")
-        save_path = process_one_image(
-            root_folder,
-            source_image,
-            aligned_folder,
-            face_detector,
-            final_crop_size,
-            align_mode,
-            aligner,
-            device
-        )
-        if save_path is not None:
-            print(f"Saving cropped face to {save_path}.")
+        save_path = get_save_path(root_folder, source_image, aligned_folder)
+        if overwrite or not os.path.exists(save_path):
+            print(f"Processing image {source_image}.")
+            save_path = process_one_image(
+                source_image,
+                save_path,
+                face_detector,
+                final_crop_size,
+                align_mode,
+                aligner,
+                device
+            )
+            if save_path is not None:
+                print(f"Saving cropped face to {save_path}.")
+            else:
+                print(f"No face detected in source image {source_image}.")
         else:
-            print(f"No face detected in source image {source_image}.")
+            print(f"Not processing image {source_image} as target {save_path} already exists and overwrite is false.")
     else:
         if not os.path.exists(source_folder):
             raise ValueError(f"Arguments 'source_folder' {source_folder} points to a folder that does not exist.")
     
         print(f"Processing images in folder {source_folder}.")
-        total = sum([len(files) for _, _, files in os.walk(source_folder)])
+        print("Counting number of files to process.")
+        total = sum([len(list(filter(lambda file: overwrite or not os.path.exists(get_save_path(source_folder, os.path.join(root, file), aligned_folder)), files))) \
+                     for root, _, files in os.walk(source_folder)])
+        print(f"Number of files to process: {total}.")
         with tqdm(total=total) as pbar:
             for root, _, files in os.walk(source_folder):
                 for file in files:
                     source_image = os.path.join(root, file)
-                    save_path = process_one_image(
-                        source_folder,
-                        source_image,
-                        aligned_folder,
-                        face_detector,
-                        final_crop_size,
-                        align_mode,
-                        aligner,
-                        device
-                    )
-                    if save_path is None:
-                        print(f"No face detected in source image {source_image}.")
-                    pbar.update()
+                    save_path = get_save_path(source_folder, source_image, aligned_folder)
+                    if overwrite or not os.path.exists(save_path):
+                        save_path = process_one_image(
+                            source_image,
+                            save_path,
+                            face_detector,
+                            final_crop_size,
+                            align_mode,
+                            aligner,
+                            device
+                        )
+                        if save_path is None:
+                            print(f"No face detected in source image {source_image}.")
+                        pbar.update()
 
 
 def main(args: AlignArguments):
@@ -140,6 +149,7 @@ def main(args: AlignArguments):
         args.aligned_folder,
         face_detector,
         args.final_crop_size,
+        args.overwrite,
         args.align_mode,
         aligner,
         device

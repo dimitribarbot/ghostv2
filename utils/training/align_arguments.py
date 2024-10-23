@@ -3,6 +3,7 @@ from typing import Optional
 from dataclasses import dataclass
 
 from simple_parsing import choice
+from simple_parsing.helpers import flag
 
 def make_real_path(relative_path):
     return os.path.join(os.path.dirname(os.path.realpath(__file__)), "../..", relative_path)
@@ -23,3 +24,4 @@ class AlignArguments:
     device_id: int = 0
     final_crop_size: int = 256
     align_mode: str = choice("facexlib", "insightface", "mtcnn", "cvlface", default="facexlib")
+    overwrite: bool = flag(default=False, negative_prefix="--no-")
