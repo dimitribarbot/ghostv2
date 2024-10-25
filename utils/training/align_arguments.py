@@ -15,6 +15,7 @@ class AlignArguments:
     source_image: Optional[str] = None
     source_folder: Optional[str] = None
     aligned_folder: str = make_real_path("./examples/images/training_facexlib")
+    output_extension: str = choice(".png", ".jpg", "same_as_source", default="same_as_source")
 
     """ Model arguments """
     retina_face_model_path: str = make_real_path("./weights/RetinaFace/Resnet50_Final.safetensors")

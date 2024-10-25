@@ -14,11 +14,13 @@ from utils.training.align_arguments import AlignArguments
 from utils.image_processing import get_aligned_face_and_affine_matrix
 
 
-def get_save_path(root_folder: str, source_image: str, aligned_folder: str):
-    image_name = os.path.splitext(os.path.basename(source_image))[0]
+def get_save_path(root_folder: str, source_image: str, aligned_folder: str, output_extension: str):
+    source_image_name = os.path.basename(source_image)
+    image_name, extension = os.path.splitext(source_image_name)
     relative_path = os.path.relpath(os.path.dirname(source_image), root_folder)
     save_folder = os.path.join(aligned_folder, relative_path)
-    save_path = os.path.join(save_folder, f"{image_name}.png")
+    save_extension = extension if output_extension == "same_as_source" else output_extension
+    save_path = os.path.join(save_folder, f"{image_name}{save_extension}")
     return save_path
 
 
@@ -57,6 +59,7 @@ def process(
     source_image: Optional[str],
     source_folder: Optional[str],
     aligned_folder: str,
+    output_extension: str,
     face_detector: RetinaFace,
     final_crop_size: int,
     overwrite: bool,
@@ -72,7 +75,7 @@ def process(
             raise ValueError(f"Arguments 'source_image' {source_image} points to a file that does not exist.")
         
         root_folder = os.path.dirname(source_image)
-        save_path = get_save_path(root_folder, source_image, aligned_folder)
+        save_path = get_save_path(root_folder, source_image, aligned_folder, output_extension)
         if overwrite or not os.path.exists(save_path):
             print(f"Processing image {source_image}.")
             save_path = process_one_image(
@@ -96,14 +99,14 @@ def process(
     
         print(f"Processing images in folder {source_folder}.")
         print("Counting number of files to process.")
-        total = sum([len(list(filter(lambda file: overwrite or not os.path.exists(get_save_path(source_folder, os.path.join(root, file), aligned_folder)), files))) \
+        total = sum([len(list(filter(lambda file: overwrite or not os.path.exists(get_save_path(source_folder, os.path.join(root, file), aligned_folder, output_extension)), files))) \
                      for root, _, files in os.walk(source_folder)])
         print(f"Number of files to process: {total}.")
         with tqdm(total=total) as pbar:
             for root, _, files in os.walk(source_folder):
                 for file in files:
                     source_image = os.path.join(root, file)
-                    save_path = get_save_path(source_folder, source_image, aligned_folder)
+                    save_path = get_save_path(source_folder, source_image, aligned_folder, output_extension)
                     if overwrite or not os.path.exists(save_path):
                         save_path = process_one_image(
                             source_image,
@@ -147,6 +150,7 @@ def main(args: AlignArguments):
         args.source_image,
         args.source_folder,
         args.aligned_folder,
+        args.output_extension,
         face_detector,
         args.final_crop_size,
         args.overwrite,
