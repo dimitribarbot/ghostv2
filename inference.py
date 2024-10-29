@@ -74,24 +74,22 @@ class GhostV2Module(L.LightningModule):
         self.G.eval()
 
         if args.face_embeddings == "arcface":
-            if args.align_mode == "cvlface":
-                from CVLFace import get_arcface_model
-                self.embedding_model = get_arcface_model("./weights/CVLFace/cvlface_arcface_ir101_webface4m.safetensors")
-            else:
-                from ArcFace.iresnet import iresnet100
-                self.embedding_model = iresnet100()
-                self.embedding_model.load_state_dict(load_file("./weights/ArcFace/backbone.safetensors"))
-                self.embedding_model.eval()
+            from ArcFace.iresnet import iresnet100
+            self.embedding_model = iresnet100()
+            self.embedding_model.load_state_dict(load_file("./weights/ArcFace/backbone.safetensors"))
+            self.embedding_model.eval()
         elif args.face_embeddings == "adaface":
-            if args.align_mode == "cvlface":
-                from CVLFace import get_adaface_model
-                self.embedding_model = get_adaface_model("./weights/CVLFace/cvlface_adaface_ir101_webface12m.safetensors")
-            else:
-                from AdaFace.net import build_model
-                self.embedding_model = build_model("ir_101")
-                self.embedding_model.load_state_dict(load_file("./weights/AdaFace/adaface_ir101_webface12m.safetensors"))
-                self.embedding_model.eval()
-        elif args.face_embeddings == "vit":
+            from AdaFace.net import build_model
+            self.embedding_model = build_model("ir_101")
+            self.embedding_model.load_state_dict(load_file("./weights/AdaFace/adaface_ir101_webface12m.safetensors"))
+            self.embedding_model.eval()
+        elif args.face_embeddings == "clv_arcface":
+            from CVLFace import get_arcface_model
+            self.embedding_model = get_arcface_model("./weights/CVLFace/cvlface_arcface_ir101_webface4m.safetensors")
+        elif args.face_embeddings == "clv_adaface":
+            from CVLFace import get_adaface_model
+            self.embedding_model = get_adaface_model("./weights/CVLFace/cvlface_adaface_ir101_webface12m.safetensors")
+        elif args.face_embeddings == "cvl_vit":
             from CVLFace import get_vit_model
             self.embedding_model = get_vit_model("./weights/CVLFace/cvlface_adaface_vit_base_webface4m.safetensors")
         else:

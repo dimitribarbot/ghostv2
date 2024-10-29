@@ -29,7 +29,7 @@ class TrainingArguments:
     weight_eyes: float = 0                                                  # Eyes Loss weight
 
     """ Training params you may want to change """
-    face_embeddings: str = choice("facenet", "arcface", "adaface", "vit", default="facenet")  # Model used for face embeddings
+    face_embeddings: str = choice("facenet", "arcface", "adaface", "cvl_arcface", "cvl_adaface", "cvl_vit", default="facenet")  # Model used for face embeddings
     backbone: str = choice("unet", "linknet", "resnet", default="unet")     # Backbone for attribute encoder
     num_blocks: int = 2                                                     # Numbers of AddBlocks at AddResblock
     same_person: float = 0.2                                                # Probability of using same person identity during training
@@ -44,7 +44,7 @@ class TrainingArguments:
     scheduler_total_steps: int = -1                                         # Parameter for OneCycleLR scheduler, leave to -1 to automatically compute it from max_epoch
     scheduler_last_batches: int = -1                                        # Parameter for OneCycleLR scheduler, leave to -1 to start from scratch
     eye_detector_loss: bool = flag(default=False, negative_prefix="--no-")  # If True eye loss with using AdaptiveWingLoss detector is applied to generator
-    align_mode: str = choice("facexlib", "insightface", "mtcnn", "cvlface", default="facexlib")
+    align_mode: str = choice("facexlib", "insightface", "mtcnn", "cvlface", default="insightface")
 
     """ W&B logging """
     use_wandb: bool = flag(default=False, negative_prefix="--no-")          # Use wandb to track your experiments or not
