@@ -193,6 +193,10 @@ class LivePortraitPipeline(object):
         return combined_lip_ratio_tensor
     
 
+    def is_input_face_valid(self, eye_ratio, pitch, yaw, roll):
+        return eye_ratio >= 0.34 and eye_ratio <= 0.42 and pitch >= -15 and pitch <= 15 and yaw >= -25 and yaw <= 25 and roll >= -15 and roll <= 15
+        
+
     @torch.no_grad()
     def prepare_retargeting_image_multi(
         self,
@@ -203,6 +207,7 @@ class LivePortraitPipeline(object):
         input_head_roll_variation: torch.Tensor,
         do_crop: bool,
         crop_scale: float,
+        filter_valid_faces: bool,
     ):
         if do_crop:
             crop_info = self.cropper.crop_source_image(img_rgb, original_lmk, crop_scale)
@@ -223,6 +228,8 @@ class LivePortraitPipeline(object):
         x_s_info_pitch = x_s_info['pitch'].repeat(input_head_pitch_variation.size(0), 1)
         x_s_info_yaw = x_s_info['yaw'].repeat(input_head_yaw_variation.size(0), 1)
         x_s_info_roll = x_s_info['roll'].repeat(input_head_roll_variation.size(0), 1)
+        if filter_valid_faces and not self.is_input_face_valid(source_eye_ratio, x_s_info['pitch'].item(), x_s_info['yaw'].item(), x_s_info['roll'].item()):
+            source_lmk_user = None
         x_d_info_user_pitch = x_s_info_pitch + input_head_pitch_variation.unsqueeze(-1)
         x_d_info_user_yaw = x_s_info_yaw + input_head_yaw_variation.unsqueeze(-1)
         x_d_info_user_roll = x_s_info_roll + input_head_roll_variation.unsqueeze(-1)
@@ -242,6 +249,7 @@ class LivePortraitPipeline(object):
         all_parameters: List[List[RetargetingParameters]],
         do_crop: bool,
         crop_scale: float,
+        filter_valid_faces: bool,
     ):
         if len(original_lmks) != len(all_parameters) or len(original_lmks) != len(faces_rgb) or len(all_parameters) == 0:
             return None
@@ -258,9 +266,19 @@ class LivePortraitPipeline(object):
 
             f_s_user, x_s_user, R_s_user, R_d_user, x_s_info, source_lmk_user, source_eye_ratio, source_lip_ratio, crop_M_c2o, mask_ori = \
                 self.prepare_retargeting_image_multi(
-                    source_img, original_lmk, input_head_pitch_variation, input_head_yaw_variation, input_head_roll_variation, do_crop, crop_scale)
+                    source_img, original_lmk,
+                    input_head_pitch_variation,
+                    input_head_yaw_variation,
+                    input_head_roll_variation,
+                    do_crop,
+                    crop_scale,
+                    filter_valid_faces
+                )
             if source_lmk_user is None:
-                return None
+                if do_crop:
+                    return None
+                paste_back_info.append((None, None, None))
+                continue
 
             x_s_user = cast(torch.Tensor, x_s_user.repeat(len(parameters), 1, 1).to(self.device))
             f_s_user = f_s_user.repeat(len(parameters), 1, 1, 1, 1).to(self.device)
@@ -329,6 +347,6 @@ class LivePortraitPipeline(object):
                     paste_back_out = paste_back(out[out_img_index], crop_M_c2o, out_to_ori_blend[out_img_index], mask_ori)
                     out_to_ori_blend[out_img_index] = paste_back_out
         else:
-            out_to_ori_blend = [[out_img for out_img in out] for out, _, _ in paste_back_info]
+            out_to_ori_blend = [[out_img for out_img in out] if out is not None else [] for out, _, _ in paste_back_info]
 
         return out_to_ori_blend

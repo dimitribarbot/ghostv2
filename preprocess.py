@@ -72,7 +72,7 @@ def get_all_face_retargeting_parameters(number_of_faces: int, number_of_variants
                 lip_variation_two=round(random.uniform(0, 5), 2),
                 lip_variation_three=round(random.uniform(-10, 20), 0),
                 smile=round(random.uniform(-0.2, 0.6), 2),
-                wink=round(random.uniform(0, 10), 2),
+                wink=0.0,
                 eyebrow=round(random.uniform(-7.5, 7.5), 2),
                 eyeball_direction_x=round(random.uniform(-10, 10), 2),
                 eyeball_direction_y=round(random.uniform(-10, 10), 2),
@@ -91,6 +91,7 @@ def get_retargeted_images(
     number_of_variants_per_face: int,
     do_crop: bool,
     crop_scale: float,
+    filter_valid_faces: bool,
     save_retargeted: bool,
     output_dir_retargeted: str,
 ):
@@ -116,12 +117,13 @@ def get_retargeted_images(
         all_parameters,
         do_crop,
         crop_scale,
+        filter_valid_faces,
     )
+    
+    if retargeted_image_variations is not None:
+        if do_crop:
+            retargeted_images = [bgr_image]
 
-    if do_crop:
-        retargeted_images = [bgr_image]
-
-        if retargeted_image_variations is not None:
             retargeted_image_variations = [
                 cv2.cvtColor(variation, cv2.COLOR_RGB2BGR) for variation in retargeted_image_variations if variation is not None
             ]
@@ -134,15 +136,19 @@ def get_retargeted_images(
                     )
 
             retargeted_images += retargeted_image_variations
-    else:
-        retargeted_images = [[face["cropped_bgr"]] for face in faces]
+        else:
+            retargeted_images = [[face["cropped_bgr"]] for face in faces]
 
-        if retargeted_image_variations is not None:
             for face_index in range(len(retargeted_image_variations)):
-                retargeted_image_variations[face_index] = [
-                    cv2.cvtColor(variation, cv2.COLOR_RGB2BGR) for variation in retargeted_image_variations[face_index] if variation is not None
-                ]
-                retargeted_images[face_index] += retargeted_image_variations[face_index]
+                if len(retargeted_image_variations[face_index]) > 0:
+                    retargeted_image_variations[face_index] = [
+                        cv2.cvtColor(variation, cv2.COLOR_RGB2BGR) for variation in retargeted_image_variations[face_index] if variation is not None
+                    ]
+                    retargeted_images[face_index] += retargeted_image_variations[face_index]
+                else:
+                    retargeted_images[face_index] = []
+    else:
+        retargeted_images = []
     
     return retargeted_images
 
@@ -337,11 +343,15 @@ def process(
                         args.number_of_variants_per_face,
                         args.retargeting_do_crop,
                         args.retargeting_crop_scale,
+                        args.filter_valid_faces,
                         args.save_retargeted,
                         args.output_dir_retargeted
                     )
 
                     if args.retargeting_do_crop:
+                        if len(retargeted_images) == 0:
+                            continue
+
                         retargeted_images_faces = face_detector(retargeted_images, threshold=0.97, return_dict=True, cv=True)
 
                         if not verify_retargeted_faces_have_same_length(retargeted_images_faces, args.eye_dist_threshold):
@@ -378,28 +388,33 @@ def process(
                                 )
                     else:
                         for retargeted_face_index in range(len(retargeted_images)):
+                            if len(retargeted_images[retargeted_face_index]) == 0:
+                                continue
+
                             image_name = f'{id}_{retargeted_face_index:02d}'
 
                             face_retargeted_images = [random_horizontal_flip(retargeted_image) for retargeted_image in retargeted_images[retargeted_face_index]]
                             retargeted_faces = face_detector(face_retargeted_images, threshold=0.97, return_dict=True, cv=True)
 
                             for image_index, retargeted_face in enumerate(retargeted_faces):
-                                if len(retargeted_face) > 0:
-                                    align_and_save(
-                                        gfpgan,
-                                        face_retargeted_images[image_index],
-                                        retargeted_face[0]["kps"],
-                                        image_index,
-                                        args.final_crop_size,
-                                        cropped_face_path,
-                                        cropped_face_path_resized,
-                                        image_name,
-                                        args.align_mode,
-                                        aligner,
-                                        device,
-                                        args.save_full_size,
-                                        should_enhance_face=False
-                                    )
+                                if len(retargeted_face) == 0:
+                                    continue
+
+                                align_and_save(
+                                    gfpgan,
+                                    face_retargeted_images[image_index],
+                                    retargeted_face[0]["kps"],
+                                    image_index,
+                                    args.final_crop_size,
+                                    cropped_face_path,
+                                    cropped_face_path_resized,
+                                    image_name,
+                                    args.align_mode,
+                                    aligner,
+                                    device,
+                                    args.save_full_size,
+                                    should_enhance_face=False
+                                )
                 except Exception as ex:
                     print(f"An error occurred for sample {id}: {ex}")
                     traceback.print_tb(ex.__traceback__)

@@ -15,7 +15,7 @@ class PreprocessArguments:
     laion_face_base_dir: str = "/home/dimitribarbot/datasets/LAION-Face"
     laion_face_part_indices: List[int] = list_field(default=[0])
     output_dir: str = "/home/dimitribarbot/datasets/LAION-Face/laion_face_cropped_512x512_unaligned"
-    output_dir_resized: str = "/home/dimitribarbot/datasets/LAION-Face/laion_face_cropped_256x256"
+    output_dir_resized: str = "/home/dimitribarbot/datasets/LAION-Face/laion_face_cropped_256x256_v2"
     output_dir_retargeted: str = "/home/dimitribarbot/datasets/LAION-Face/laion_face_retargeted_data"
 
     """ Model arguments """
@@ -36,12 +36,13 @@ class PreprocessArguments:
     min_original_image_size: int = 250
     eye_dist_threshold: int = 5
     final_crop_size: int = 256
-    align_mode: str = choice("facexlib", "insightface", "mtcnn", "cvlface", default="facexlib")
+    align_mode: str = choice("facexlib", "insightface", "mtcnn", "cvlface", default="insightface")
 
     """ Retargeting options """
     number_of_variants_per_face: int = 9
     enhance_before_retargeting: bool = flag(default=False, negative_prefix="--no-")
     retargeting_do_crop: bool = flag(default=False, negative_prefix="--no-")
     retargeting_crop_scale: float = 2.3
+    filter_valid_faces: bool = flag(default=True, negative_prefix="--no-")
     save_full_size: bool = flag(default=False, negative_prefix="--no-")
     save_retargeted: bool = flag(default=False, negative_prefix="--no-")
