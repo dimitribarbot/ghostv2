@@ -20,6 +20,10 @@ from utils.preprocessing.preprocess import preprocess
 from utils.preprocessing.preprocess_lagenda_arguments import PreprocessLagendaArguments
 
 
+def output_file_exists(cropped_face_path_resized: str, file: str):
+    return os.path.exists(os.path.join(cropped_face_path_resized, f"{os.path.splitext(file)[0]}_00"))
+
+
 @torch.no_grad()
 def process(
     face_detector: RetinaFace,
@@ -35,7 +39,7 @@ def process(
     cropped_face_path = args.output_dir
     cropped_face_path_resized = args.output_dir_resized
 
-    image_files = os.listdir(lagenda_base_dir)
+    image_files = list(filter(lambda file: not output_file_exists(cropped_face_path_resized, file), os.listdir(lagenda_base_dir)))
 
     for image_file in tqdm(image_files, total=len(image_files)):
         try:
