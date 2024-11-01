@@ -105,36 +105,36 @@ class GhostV2Module(L.LightningModule):
             print("Initializing ArcFace model")
             from ArcFace.iresnet import iresnet100
             self.embedding_model = iresnet100()
-            self.embedding_model.load_state_dict(load_file("./weights/ArcFace/backbone.safetensors"))
+            self.embedding_model.load_state_dict(load_file(self.args.arcface_model_path))
             self.embedding_model.eval()
         elif args.face_embeddings == "adaface":
             print("Initializing AdaFace model")
             from AdaFace.net import build_model
             self.embedding_model = build_model("ir_101")
-            self.embedding_model.load_state_dict(load_file("./weights/AdaFace/adaface_ir101_webface12m.safetensors"))
+            self.embedding_model.load_state_dict(load_file(self.args.adaface_model_path))
             self.embedding_model.eval()
         elif self.args.face_embeddings == "cvl_arcface":
             print("Initializing CVL ArcFace model")
             from CVLFace import get_arcface_model
-            self.embedding_model = get_arcface_model("./weights/CVLFace/cvlface_arcface_ir101_webface4m.safetensors")
+            self.embedding_model = get_arcface_model(self.args.cvl_arcface_model_path)
         elif args.face_embeddings == "cvl_adaface":
             print("Initializing CVL AdaFace model")
             from CVLFace import get_adaface_model
-            self.embedding_model = get_adaface_model("./weights/CVLFace/cvlface_adaface_ir101_webface12m.safetensors")
+            self.embedding_model = get_adaface_model(self.args.cvl_adaface_model_path)
         elif args.face_embeddings == "cvl_vit":
             print("Initializing CVL ViT model")
             from CVLFace import get_vit_model
-            self.embedding_model = get_vit_model("./weights/CVLFace/cvlface_adaface_vit_base_webface4m.safetensors")
+            self.embedding_model = get_vit_model(self.args.cvl_vit_model_path)
         else:
             print("Initializing Facenet model")
             from facenet.inception_resnet_v1 import InceptionResnetV1
             self.embedding_model = InceptionResnetV1()
-            self.embedding_model.load_state_dict(load_file("./weights/Facenet/facenet_pytorch.safetensors"))
+            self.embedding_model.load_state_dict(load_file(self.args.facenet_model_path))
             self.embedding_model.eval()
 
         if self.args.eye_detector_loss:
             self.model_ft = models.FAN(4, False, False, 98)
-            self.model_ft.load_state_dict(load_file("./weights/AdaptiveWingLoss/WFLW_4HG.safetensors"))
+            self.model_ft.load_state_dict(load_file(self.args.adaptive_wing_loss_model_path))
             self.model_ft.eval()
         else:
             self.model_ft=None

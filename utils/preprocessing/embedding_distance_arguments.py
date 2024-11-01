@@ -16,6 +16,12 @@ class EmbeddingDistanceArguments:
     """ Model arguments """
     retina_face_model_path: str = make_real_path("./weights/RetinaFace/Resnet50_Final.safetensors")
     cvlface_aligner_model_path: str = make_real_path("./weights/CVLFace/cvlface_DFA_mobilenet.safetensors")
+    arcface_model_path: str = make_real_path("./weights/ArcFace/backbone.safetensors")
+    adaface_model_path: str = make_real_path("./weights/AdaFace/adaface_ir101_webface12m.safetensors")
+    cvl_arcface_model_path: str = make_real_path("./weights/CVLFace/cvlface_arcface_ir101_webface4m.safetensors")
+    cvl_adaface_model_path: str = make_real_path("./weights/CVLFace/cvlface_adaface_ir101_webface12m.safetensors")
+    cvl_vit_model_path: str = make_real_path("./weights/CVLFace/cvlface_adaface_vit_base_webface4m.safetensors")
+    facenet_model_path: str = make_real_path("./weights/Facenet/facenet_pytorch.safetensors")
     face_embeddings: str = choice("facenet", "arcface", "adaface", "cvl_arcface", "cvl_adaface", "cvl_vit", default="cvl_adaface")
 
     """ Run arguments """

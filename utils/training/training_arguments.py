@@ -29,6 +29,13 @@ class TrainingArguments:
     weight_eyes: float = 0                                                  # Eyes Loss weight
 
     """ Training params you may want to change """
+    arcface_model_path: str = make_real_path("./weights/ArcFace/backbone.safetensors")
+    adaface_model_path: str = make_real_path("./weights/AdaFace/adaface_ir101_webface12m.safetensors")
+    cvl_arcface_model_path: str = make_real_path("./weights/CVLFace/cvlface_arcface_ir101_webface4m.safetensors")
+    cvl_adaface_model_path: str = make_real_path("./weights/CVLFace/cvlface_adaface_ir101_webface12m.safetensors")
+    cvl_vit_model_path: str = make_real_path("./weights/CVLFace/cvlface_adaface_vit_base_webface4m.safetensors")
+    facenet_model_path: str = make_real_path("./weights/Facenet/facenet_pytorch.safetensors")
+    adaptive_wing_loss_model_path: str = make_real_path("./weights/AdaptiveWingLoss/WFLW_4HG.safetensors")
     face_embeddings: str = choice("facenet", "arcface", "adaface", "cvl_arcface", "cvl_adaface", "cvl_vit", default="facenet")  # Model used for face embeddings
     backbone: str = choice("unet", "linknet", "resnet", default="unet")     # Backbone for attribute encoder
     num_blocks: int = 2                                                     # Numbers of AddBlocks at AddResblock
