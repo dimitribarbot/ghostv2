@@ -15,6 +15,8 @@ class EmbeddingDistanceArguments:
 
     """ Model arguments """
     retina_face_model_path: str = make_real_path("./weights/RetinaFace/Resnet50_Final.safetensors")
+    cvlface_original_aligner_model_path: str = make_real_path("./weights/CVLFace/cvlface_DFA_mobilenet")  # First run "pip install timm huggingface_hub transformers" to use this
+    cvlface_original_aligner_repository: str = "minchul/cvlface_DFA_mobilenet"  # First run "pip install timm huggingface_hub transformers" to use this
     cvlface_aligner_model_path: str = make_real_path("./weights/CVLFace/cvlface_DFA_mobilenet.safetensors")
     arcface_model_path: str = make_real_path("./weights/ArcFace/backbone.safetensors")
     adaface_model_path: str = make_real_path("./weights/AdaFace/adaface_ir101_webface12m.safetensors")
@@ -28,8 +30,8 @@ class EmbeddingDistanceArguments:
     device_id: int = 0
     source_crop_size: int = 256
     target_crop_size: int = 112
-    source_align_mode: str = choice("facexlib", "insightface", "mtcnn", "cvlface", default="insightface")
-    target_align_mode: str = choice("facexlib", "insightface", "mtcnn", "cvlface", default="cvlface")
+    source_align_mode: str = choice("facexlib", "insightface", "mtcnn", "cvlface", "original_cvlface", default="insightface")
+    target_align_mode: str = choice("facexlib", "insightface", "mtcnn", "cvlface", "original_cvlface", default="cvlface")
 
     """ Debug arguments """
     debug: bool = flag(default=False, negative_prefix="--no-")

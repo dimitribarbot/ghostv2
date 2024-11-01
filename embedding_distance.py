@@ -5,10 +5,12 @@ from simple_parsing import ArgumentParser
 
 import cv2
 import torch
+import torch.nn.functional as F
 from safetensors.torch import load_file
 
 from CVLFace import get_aligner
 from CVLFace.differentiable_face_aligner import DifferentiableFaceAligner
+from CVLFace.utils import load_model_by_repo_id, tensor_to_numpy
 from RetinaFace.detector import RetinaFace
 from utils.image_processing import convert_to_batch_tensor, get_aligned_face_and_affine_matrix, get_face_embeddings
 from utils.preprocessing.embedding_distance_arguments import EmbeddingDistanceArguments
@@ -18,6 +20,7 @@ from utils.preprocessing.embedding_distance_arguments import EmbeddingDistanceAr
 def process(
     embedding_model: Any,
     face_detector: RetinaFace,
+    original_aligner: Optional[DifferentiableFaceAligner],
     aligner: Optional[DifferentiableFaceAligner],
     args: EmbeddingDistanceArguments,
     device: str
@@ -30,9 +33,20 @@ def process(
         return
     
     lmk = detected_faces[0]["kps"]
-
-    source_cropped_face, _ = get_aligned_face_and_affine_matrix(bgr_image, lmk, args.source_crop_size, args.source_align_mode, aligner, device)
-    target_cropped_face, _ = get_aligned_face_and_affine_matrix(bgr_image, lmk, args.target_crop_size, args.target_align_mode, aligner, device)
+    
+    if args.source_align_mode == "original_cvlface":
+        source_cropped_face, _, _, _, _, _ = original_aligner(convert_to_batch_tensor(rgb_image, device))
+        source_cropped_face = F.interpolate(source_cropped_face, [args.target_crop_size, args.target_crop_size], mode="bilinear")
+        source_cropped_face = tensor_to_numpy(source_cropped_face)
+    else:
+        source_cropped_face, _ = get_aligned_face_and_affine_matrix(bgr_image, lmk, args.source_crop_size, args.source_align_mode, aligner, device)
+    
+    if args.target_align_mode == "original_cvlface":
+        target_cropped_face, _, _, _, _, _ = original_aligner(convert_to_batch_tensor(rgb_image, device))
+        target_cropped_face = F.interpolate(target_cropped_face, [args.target_crop_size, args.target_crop_size], mode="bilinear")
+        target_cropped_face = tensor_to_numpy(target_cropped_face)
+    else:
+        target_cropped_face, _ = get_aligned_face_and_affine_matrix(bgr_image, lmk, args.target_crop_size, args.target_align_mode, aligner, device)
 
     if args.debug:
         os.makedirs(os.path.dirname(args.debug_source_face_path), exist_ok=True)
@@ -46,7 +60,7 @@ def process(
     source_embeddings = get_face_embeddings(source_image_face, embedding_model, args.face_embeddings)
     target_embeddings = get_face_embeddings(target_image_face, embedding_model, args.face_embeddings)
 
-    distance = 1 - torch.nn.CosineSimilarity(dim=1, eps=1e-6)(source_embeddings, target_embeddings).item()
+    distance = 1 - F.cosine_similarity(source_embeddings, target_embeddings).item()
 
     print(f"Distance between embeddings is: {distance}")
 
@@ -70,6 +84,14 @@ def main(args: EmbeddingDistanceArguments):
         fp16=True,
         model_path=args.retina_face_model_path
     )
+
+    original_aligner = None
+    if args.source_align_mode == "original_cvlface" or args.target_align_mode == "original_cvlface":
+        original_aligner = load_model_by_repo_id(
+            args.cvlface_original_aligner_repository,
+            args.cvlface_original_aligner_model_path
+        )
+        original_aligner = original_aligner.to(device)
 
     aligner = None
     if args.source_align_mode == "cvlface" or args.target_align_mode == "cvlface":
@@ -111,6 +133,7 @@ def main(args: EmbeddingDistanceArguments):
     process(
         embedding_model,
         face_detector,
+        original_aligner,
         aligner,
         args,
         device
