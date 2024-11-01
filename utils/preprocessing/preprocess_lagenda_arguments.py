@@ -11,3 +11,6 @@ class PreprocessLagendaArguments(PreprocessArguments):
 
     """ Data arguments """
     lagenda_base_dir: str = "/home/dimitribarbot/datasets/Lagenda/lag_benchmark"
+    output_dir: str = "/home/dimitribarbot/datasets/Lagenda/lag_benchmark_face_cropped_512x512_unaligned"
+    output_dir_resized: str = "/home/dimitribarbot/datasets/Lagenda/lag_benchmark_face_cropped_256x256"
+    output_dir_retargeted: str = "/home/dimitribarbot/datasets/Lagenda/lag_benchmark_retargeted_data"

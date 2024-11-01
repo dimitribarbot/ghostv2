@@ -10,11 +10,6 @@ def make_real_path(relative_path):
 @dataclass
 class PreprocessArguments:
 
-    """ Data arguments """
-    output_dir: str = "/home/dimitribarbot/datasets/Lagenda/lag_benchmark_cropped_512x512_unaligned"
-    output_dir_resized: str = "/home/dimitribarbot/datasets/Lagenda/lag_benchmark_cropped_256x256"
-    output_dir_retargeted: str = "/home/dimitribarbot/datasets/Lagenda/lag_benchmark_retargeted_data"
-
     """ Model arguments """
     gfpgan_model_path: str = make_real_path("./weights/GFPGAN/GFPGANCleanv1-NoCE-C2.safetensors")
     face_parser_model_path: str = make_real_path("./weights/BiSeNet/79999_iter.safetensors")

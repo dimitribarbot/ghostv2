@@ -56,6 +56,7 @@ def process(
                 args,
                 cropped_face_path,
                 cropped_face_path_resized,
+                args.output_dir_retargeted,
                 device
             )
         except Exception as ex:

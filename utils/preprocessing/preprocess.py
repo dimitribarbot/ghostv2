@@ -247,6 +247,7 @@ def preprocess(
     args: PreprocessArguments,
     cropped_face_path:str,
     cropped_face_path_resized: str,
+    output_dir_retargeted: str,
     device: str
 ):
     if not rgb_image.shape[0] > args.min_original_image_size or not rgb_image.shape[1] > args.min_original_image_size:
@@ -311,7 +312,7 @@ def preprocess(
         args.retargeting_crop_scale,
         args.filter_valid_faces,
         args.save_retargeted,
-        args.output_dir_retargeted
+        output_dir_retargeted
     )
 
     if args.retargeting_do_crop:
