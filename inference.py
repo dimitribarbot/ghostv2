@@ -171,6 +171,8 @@ class GhostV2Module(L.LightningModule):
             Xt_image, Xt_face_kps, face_size=256, align_mode=self.align_mode, aligner=self.aligner, device=self.device)
         
         if self.debug:
+            os.makedirs(os.path.dirname(self.debug_source_face_path), exist_ok=True)
+            os.makedirs(os.path.dirname(self.debug_target_face_path), exist_ok=True)
             cv2.imwrite(self.debug_source_face_path, Xs_face)
             cv2.imwrite(self.debug_target_face_path, Xt_face)
 
@@ -190,6 +192,7 @@ class GhostV2Module(L.LightningModule):
             Yt_face_enhanced = Yt_face
 
         if self.debug:
+            os.makedirs(os.path.dirname(self.debug_swapped_face_path), exist_ok=True)
             cv2.imwrite(self.debug_swapped_face_path, Yt_face_enhanced)
 
         Yt_image = paste_face_back(self.face_parser, Xt_image, Yt_face_enhanced, Xt_affine_matrix, self.device)
