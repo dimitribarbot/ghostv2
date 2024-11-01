@@ -10,7 +10,7 @@ import torch
 from CVLFace import get_aligner
 from CVLFace.differentiable_face_aligner import DifferentiableFaceAligner
 from RetinaFace.detector import RetinaFace
-from utils.training.align_arguments import AlignArguments
+from utils.preprocessing.align_arguments import AlignArguments
 from utils.image_processing import get_aligned_face_and_affine_matrix
 
 

@@ -6,7 +6,7 @@ from tqdm import tqdm
 
 import cv2
 
-from utils.training.convert_arguments import ConvertArguments
+from utils.preprocessing.convert_arguments import ConvertArguments
 
 
 def get_save_path(root_folder: str, source_image: str, output_folder: str, output_extension: str):
