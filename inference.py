@@ -8,7 +8,6 @@ from simple_parsing import ArgumentParser
 import cv2
 import torch
 from torch.utils.data import DataLoader
-from torchvision.transforms.functional import normalize
 from safetensors.torch import load_file
 import lightning as L
 
@@ -65,6 +64,11 @@ class GhostV2Module(L.LightningModule):
         self.enhance_output = args.enhance_output
         self.align_mode = args.align_mode
         self.face_embeddings = args.face_embeddings
+
+        self.debug = args.debug
+        self.debug_source_face_path = args.debug_source_face_path
+        self.debug_target_face_path = args.debug_target_face_path
+        self.debug_swapped_face_path = args.debug_swapped_face_path
         
         checkpoint = load_file(args.G_path)
         checkpoint = { k.replace("_orig_mod.", ""): v for k,v in checkpoint.items() }
@@ -74,25 +78,31 @@ class GhostV2Module(L.LightningModule):
         self.G.eval()
 
         if args.face_embeddings == "arcface":
+            print("Initializing ArcFace model")
             from ArcFace.iresnet import iresnet100
             self.embedding_model = iresnet100()
             self.embedding_model.load_state_dict(load_file("./weights/ArcFace/backbone.safetensors"))
             self.embedding_model.eval()
         elif args.face_embeddings == "adaface":
+            print("Initializing AdaFace model")
             from AdaFace.net import build_model
             self.embedding_model = build_model("ir_101")
             self.embedding_model.load_state_dict(load_file("./weights/AdaFace/adaface_ir101_webface12m.safetensors"))
             self.embedding_model.eval()
-        elif args.face_embeddings == "clv_arcface":
+        elif args.face_embeddings == "cvl_arcface":
+            print("Initializing CVL ArcFace model")
             from CVLFace import get_arcface_model
             self.embedding_model = get_arcface_model("./weights/CVLFace/cvlface_arcface_ir101_webface4m.safetensors")
-        elif args.face_embeddings == "clv_adaface":
+        elif args.face_embeddings == "cvl_adaface":
+            print("Initializing CVL AdaFace model")
             from CVLFace import get_adaface_model
             self.embedding_model = get_adaface_model("./weights/CVLFace/cvlface_adaface_ir101_webface12m.safetensors")
         elif args.face_embeddings == "cvl_vit":
+            print("Initializing CVL ViT model")
             from CVLFace import get_vit_model
             self.embedding_model = get_vit_model("./weights/CVLFace/cvlface_adaface_vit_base_webface4m.safetensors")
         else:
+            print("Initializing Facenet model")
             from facenet.inception_resnet_v1 import InceptionResnetV1
             self.embedding_model = InceptionResnetV1()
             self.embedding_model.load_state_dict(load_file("./weights/Facenet/facenet_pytorch.safetensors"))
@@ -154,10 +164,15 @@ class GhostV2Module(L.LightningModule):
         Xs_face_kps = Xs_detected_faces[self.source_face_index]["kps"]
         Xt_face_kps = Xt_detected_faces[self.target_face_index]["kps"]
 
+        print(f"Aligning source and target images using {self.align_mode} align mode")
         Xs_face, _ = get_aligned_face_and_affine_matrix(
             Xs_image, Xs_face_kps, face_size=256, align_mode=self.align_mode, aligner=self.aligner, device=self.device)
         Xt_face, Xt_affine_matrix = get_aligned_face_and_affine_matrix(
             Xt_image, Xt_face_kps, face_size=256, align_mode=self.align_mode, aligner=self.aligner, device=self.device)
+        
+        if self.debug:
+            cv2.imwrite(self.debug_source_face_path, Xs_face)
+            cv2.imwrite(self.debug_target_face_path, Xt_face)
 
         Xs_face = convert_to_batch_tensor(Xs_face, self.device)
         Xt_face = convert_to_batch_tensor(Xt_face, self.device)
@@ -173,6 +188,9 @@ class GhostV2Module(L.LightningModule):
             Yt_face_enhanced = cv2.resize(Yt_face_enhanced, (256, 256), interpolation=cv2.INTER_LINEAR)
         else:
             Yt_face_enhanced = Yt_face
+
+        if self.debug:
+            cv2.imwrite(self.debug_swapped_face_path, Yt_face_enhanced)
 
         Yt_image = paste_face_back(self.face_parser, Xt_image, Yt_face_enhanced, Xt_affine_matrix, self.device)
         if np.max(Yt_image) > 256:  # 16-bit image

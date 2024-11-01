@@ -93,7 +93,7 @@ class GhostV2Module(L.LightningModule):
         self.G.train()
         self.D.train()
 
-        if self.args.pretrained:
+        if self.args.pretrained and self.args.G_path is not None and self.args.D_path is not None:
             try:
                 self.G.load_state_dict(load_file(self.args.G_path), strict=False)
                 self.D.load_state_dict(load_file(self.args.D_path), strict=False)
@@ -102,25 +102,31 @@ class GhostV2Module(L.LightningModule):
                 print("Not found pretrained weights. Continue without any pretrained weights.")
 
         if self.args.face_embeddings == "arcface":
+            print("Initializing ArcFace model")
             from ArcFace.iresnet import iresnet100
             self.embedding_model = iresnet100()
             self.embedding_model.load_state_dict(load_file("./weights/ArcFace/backbone.safetensors"))
             self.embedding_model.eval()
         elif args.face_embeddings == "adaface":
+            print("Initializing AdaFace model")
             from AdaFace.net import build_model
             self.embedding_model = build_model("ir_101")
             self.embedding_model.load_state_dict(load_file("./weights/AdaFace/adaface_ir101_webface12m.safetensors"))
             self.embedding_model.eval()
         elif self.args.face_embeddings == "cvl_arcface":
+            print("Initializing CVL ArcFace model")
             from CVLFace import get_arcface_model
             self.embedding_model = get_arcface_model("./weights/CVLFace/cvlface_arcface_ir101_webface4m.safetensors")
         elif args.face_embeddings == "cvl_adaface":
+            print("Initializing CVL AdaFace model")
             from CVLFace import get_adaface_model
             self.embedding_model = get_adaface_model("./weights/CVLFace/cvlface_adaface_ir101_webface12m.safetensors")
         elif args.face_embeddings == "cvl_vit":
+            print("Initializing CVL ViT model")
             from CVLFace import get_vit_model
             self.embedding_model = get_vit_model("./weights/CVLFace/cvlface_adaface_vit_base_webface4m.safetensors")
         else:
+            print("Initializing Facenet model")
             from facenet.inception_resnet_v1 import InceptionResnetV1
             self.embedding_model = InceptionResnetV1()
             self.embedding_model.load_state_dict(load_file("./weights/Facenet/facenet_pytorch.safetensors"))

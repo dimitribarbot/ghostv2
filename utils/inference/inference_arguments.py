@@ -47,3 +47,9 @@ class InferenceArguments:
     source_face_index: int = 0
     target_face_index: int = 0
     align_mode: str = choice("facexlib", "insightface", "mtcnn", "cvlface", default="insightface")
+
+    """ Debug arguments """
+    debug: bool = flag(default=False, negative_prefix="--no-")
+    debug_source_face_path: str = make_real_path("./examples/results/inference/source_face.jpg")
+    debug_target_face_path: str = make_real_path("./examples/results/inference/target_face.jpg")
+    debug_swapped_face_path: str = make_real_path("./examples/results/inference/swapped_face.jpg")
