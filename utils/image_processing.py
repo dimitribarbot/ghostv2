@@ -177,7 +177,10 @@ def convert_to_batch_tensor(bgr_image: cv2.typing.MatLike, device: torch.device)
 
 def get_face_embeddings(source: torch.Tensor, model: Any, face_embeddings: str):
     model_size = [160, 160] if face_embeddings == "facenet" else [112, 112]
-    return model(F.interpolate(source, model_size, mode="bilinear"))
+    input = F.interpolate(source, model_size, mode="bilinear")
+    embeddings = model(input)
+    # embeddings = F.normalize(embeddings)
+    return embeddings
 
 
 def get_faceswap(source_path: str,
