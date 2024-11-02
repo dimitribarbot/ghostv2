@@ -193,8 +193,12 @@ class LivePortraitPipeline(object):
         return combined_lip_ratio_tensor
     
 
-    def is_input_face_valid(self, eye_ratio, pitch, yaw, roll):
-        return eye_ratio >= 0.34 and eye_ratio <= 0.42 and pitch >= -15 and pitch <= 15 and yaw >= -25 and yaw <= 25 and roll >= -15 and roll <= 15
+    def is_input_face_valid(self, eye_ratio, lip_ratio, pitch, yaw, roll):
+        return eye_ratio >= 0.34 and eye_ratio <= 0.42 \
+            and lip_ratio >= 0 and lip_ratio <= 0.8 \
+            and pitch >= -15 and pitch <= 15 \
+            and yaw >= -25 and yaw <= 25 \
+            and roll >= -15 and roll <= 15
         
 
     @torch.no_grad()
@@ -228,7 +232,8 @@ class LivePortraitPipeline(object):
         x_s_info_pitch = x_s_info['pitch'].repeat(input_head_pitch_variation.size(0), 1)
         x_s_info_yaw = x_s_info['yaw'].repeat(input_head_yaw_variation.size(0), 1)
         x_s_info_roll = x_s_info['roll'].repeat(input_head_roll_variation.size(0), 1)
-        if filter_valid_faces and not self.is_input_face_valid(source_eye_ratio, x_s_info['pitch'].item(), x_s_info['yaw'].item(), x_s_info['roll'].item()):
+        if filter_valid_faces and not self.is_input_face_valid(
+            source_eye_ratio, source_lip_ratio, x_s_info['pitch'].item(), x_s_info['yaw'].item(), x_s_info['roll'].item()):
             source_lmk_user = None
         x_d_info_user_pitch = x_s_info_pitch + input_head_pitch_variation.unsqueeze(-1)
         x_d_info_user_yaw = x_s_info_yaw + input_head_yaw_variation.unsqueeze(-1)

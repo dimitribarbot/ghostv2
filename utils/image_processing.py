@@ -337,43 +337,63 @@ def sort_faces_by_coordinates(faces: List[Dict[str, np.ndarray]]):
 
 
 @torch.no_grad()
-def paste_face_back(
+def paste_face_back_facexlib(
     face_parser: BiSeNet,
     original_image: cv2.typing.MatLike,
     restored_face: cv2.typing.MatLike,
     affine_matrix: np.ndarray,
+    use_parser: bool,
     device: torch.device,
 ):
     original_size = (original_image.shape[1], original_image.shape[0])
+    face_size = (restored_face.shape[1], restored_face.shape[0])
 
     inverse_affine = cv2.invertAffineTransform(affine_matrix)
     inv_restored = cv2.warpAffine(restored_face, inverse_affine, original_size)
 
-    face_input = cv2.resize(restored_face, (512, 512))
-    face_input = convert_to_batch_tensor(restored_face, device)
+    if use_parser:
+        face_input = cv2.resize(restored_face, (512, 512))
+        face_input = convert_to_batch_tensor(restored_face, device)
 
-    with torch.no_grad():
-        out = cast(torch.Tensor, face_parser(face_input)[0])
-    out = out.argmax(dim=1).squeeze().cpu().numpy()
-    
-    mask = np.zeros(out.shape)
-    MASK_COLORMAP = [0, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 0, 255, 0, 0, 0]
-    for idx, color in enumerate(MASK_COLORMAP):
-        mask[out == idx] = color
-    #  blur the mask
-    mask = cv2.GaussianBlur(mask, (101, 101), 11)
-    mask = cv2.GaussianBlur(mask, (101, 101), 11)
-    # remove the black borders
-    thres = 10
-    mask[:thres, :] = 0
-    mask[-thres:, :] = 0
-    mask[:, :thres] = 0
-    mask[:, -thres:] = 0
-    mask = mask / 255.
+        with torch.no_grad():
+            out = cast(torch.Tensor, face_parser(face_input)[0])
+        out = out.argmax(dim=1).squeeze().cpu().numpy()
+        
+        mask = np.zeros(out.shape)
+        MASK_COLORMAP = [0, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 0, 255, 0, 0, 0]
+        for idx, color in enumerate(MASK_COLORMAP):
+            mask[out == idx] = color
+        #  blur the mask
+        mask = cv2.GaussianBlur(mask, (101, 101), 11)
+        mask = cv2.GaussianBlur(mask, (101, 101), 11)
+        # remove the black borders
+        thres = 10
+        mask[:thres, :] = 0
+        mask[-thres:, :] = 0
+        mask[:, :thres] = 0
+        mask[:, -thres:] = 0
+        mask = mask / 255.
 
-    mask = cv2.resize(mask, restored_face.shape[:2])
-    mask = cv2.warpAffine(mask, inverse_affine, original_size, flags=3)
-    inv_soft_mask = mask[:, :, None]
+        mask = cv2.resize(mask, restored_face.shape[:2])
+        mask = cv2.warpAffine(mask, inverse_affine, original_size, flags=3)
+        inv_soft_mask = mask[:, :, None]
+    else:
+        mask = np.ones(face_size, dtype=np.float32)
+        inv_mask = cv2.warpAffine(mask, inverse_affine, original_size)
+        # remove the black borders
+        inv_mask_erosion = cv2.erode(
+            inv_mask, np.ones((2, 2), np.uint8))
+        inv_restored = inv_mask_erosion[:, :, None] * inv_restored
+        total_face_area = np.sum(inv_mask_erosion)  # // 3
+        # compute the fusion edge based on the area of face
+        w_edge = int(total_face_area**0.5) // 20
+        erosion_radius = w_edge * 2
+        inv_mask_center = cv2.erode(inv_mask_erosion, np.ones((erosion_radius, erosion_radius), np.uint8))
+        blur_size = w_edge * 2
+        inv_soft_mask = cv2.GaussianBlur(inv_mask_center, (blur_size + 1, blur_size + 1), 0)
+        if len(original_image.shape) == 2:  # original_image is gray image
+            original_image = original_image[:, :, None]
+        inv_soft_mask = inv_soft_mask[:, :, None]
 
     if len(original_image.shape) == 3 and original_image.shape[2] == 4:  # alpha channel
         alpha = original_image[:, :, 3:]
@@ -381,8 +401,66 @@ def paste_face_back(
         original_image = np.concatenate((original_image, alpha), axis=2)
     else:
         original_image = inv_soft_mask * inv_restored + (1 - inv_soft_mask) * original_image
+
+    if np.max(original_image) > 256:  # 16-bit image
+        original_image = original_image.astype(np.uint16)
+    else:
+        original_image = original_image.astype(np.uint8)
     
     return original_image
+
+
+def paste_face_back_insightface(
+    original_image: cv2.typing.MatLike,
+    target_face: cv2.typing.MatLike,
+    restored_face: cv2.typing.MatLike,
+    affine_matrix: np.ndarray,
+):
+    target_img = original_image
+    fake_diff = restored_face.astype(np.float32) - target_face.astype(np.float32)
+    fake_diff = np.abs(fake_diff).mean(axis=2)
+    fake_diff[:2,:] = 0
+    fake_diff[-2:,:] = 0
+    fake_diff[:,:2] = 0
+    fake_diff[:,-2:] = 0
+    IM = cv2.invertAffineTransform(affine_matrix)
+    img_white = np.full((target_face.shape[0],target_face.shape[1]), 255, dtype=np.float32)
+    restored_face = cv2.warpAffine(restored_face, IM, (target_img.shape[1], target_img.shape[0]), borderValue=0.0)
+    img_white = cv2.warpAffine(img_white, IM, (target_img.shape[1], target_img.shape[0]), borderValue=0.0)
+    fake_diff = cv2.warpAffine(fake_diff, IM, (target_img.shape[1], target_img.shape[0]), borderValue=0.0)
+    img_white[img_white>20] = 255
+    fthresh = 10
+    fake_diff[fake_diff<fthresh] = 0
+    fake_diff[fake_diff>=fthresh] = 255
+    img_mask = img_white
+    mask_h_inds, mask_w_inds = np.where(img_mask==255)
+    mask_h = np.max(mask_h_inds) - np.min(mask_h_inds)
+    mask_w = np.max(mask_w_inds) - np.min(mask_w_inds)
+    mask_size = int(np.sqrt(mask_h*mask_w))
+    k = max(mask_size//10, 10)
+    #k = max(mask_size//20, 6)
+    #k = 6
+    kernel = np.ones((k,k),np.uint8)
+    img_mask = cv2.erode(img_mask,kernel,iterations = 1)
+    kernel = np.ones((2,2),np.uint8)
+    fake_diff = cv2.dilate(fake_diff,kernel,iterations = 1)
+    k = max(mask_size//20, 5)
+    #k = 3
+    #k = 3
+    kernel_size = (k, k)
+    blur_size = tuple(2*i+1 for i in kernel_size)
+    img_mask = cv2.GaussianBlur(img_mask, blur_size, 0)
+    k = 5
+    kernel_size = (k, k)
+    blur_size = tuple(2*i+1 for i in kernel_size)
+    fake_diff = cv2.GaussianBlur(fake_diff, blur_size, 0)
+    img_mask /= 255
+    fake_diff /= 255
+    #img_mask = fake_diff
+    img_mask = np.reshape(img_mask, [img_mask.shape[0],img_mask.shape[1],1])
+    fake_merged = img_mask * restored_face + (1-img_mask) * target_img.astype(np.float32)
+    fake_merged = fake_merged.astype(np.uint8)
+    return fake_merged
 
 
 @torch.no_grad()

@@ -14,7 +14,7 @@ from LivePortrait.utils.io import contiguous, resize_to_limit
 from RetinaFace.detector import RetinaFace
 from face_alignment import FaceAlignment
 from utils.preprocessing.preprocess_arguments import PreprocessArguments
-from utils.image_processing import get_aligned_face_and_affine_matrix, paste_face_back, \
+from utils.image_processing import get_aligned_face_and_affine_matrix, paste_face_back_facexlib, \
     enhance_face, sort_faces_by_coordinates, random_horizontal_flip, trans_points2d
 
 
@@ -32,7 +32,7 @@ def enhance_faces_in_original_image(
     for lmk in lmks:
         cropped_face, affine_matrix = get_aligned_face_and_affine_matrix(upsample_img, lmk)
         restored_face = enhance_face(gfpgan, cropped_face, image_name, device)
-        upsample_img = paste_face_back(face_parser, upsample_img, restored_face, affine_matrix, device)
+        upsample_img = paste_face_back_facexlib(face_parser, upsample_img, restored_face, affine_matrix, True, device)
 
     if np.max(upsample_img) > 256:  # 16-bit image
         upsample_img = upsample_img.astype(np.uint16)

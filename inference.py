@@ -15,7 +15,7 @@ from network.AEI_Net import *
 from network.MultiscaleDiscriminator import *
 from utils.inference.inference_arguments import InferenceArguments
 from utils.image_processing import get_face_embeddings, convert_to_batch_tensor, \
-    torch2image, paste_face_back, enhance_face, sort_faces_by_coordinates, get_aligned_face_and_affine_matrix
+    torch2image, paste_face_back_facexlib, paste_face_back_insightface, enhance_face, sort_faces_by_coordinates, get_aligned_face_and_affine_matrix
 from utils.inference.Dataset import FaceEmbed
 from CVLFace import get_aligner
 from BiSeNet.bisenet import BiSeNet
@@ -64,6 +64,7 @@ class GhostV2Module(L.LightningModule):
         self.enhance_output = args.enhance_output
         self.align_mode = args.align_mode
         self.face_embeddings = args.face_embeddings
+        self.paste_back_mode = args.paste_back_mode
 
         self.debug = args.debug
         self.debug_source_face_path = args.debug_source_face_path
@@ -123,9 +124,11 @@ class GhostV2Module(L.LightningModule):
         self.gfpgan.load_state_dict(load_file(args.gfpgan_model_path), strict=True)
         self.gfpgan.eval()
 
-        self.face_parser = BiSeNet(num_class=19)
-        self.face_parser.load_state_dict(load_file(args.face_parser_model_path), strict=True)
-        self.face_parser.eval()
+        self.face_parser = None
+        if args.paste_back_mode == "facexlib_with_parser":
+            self.face_parser = BiSeNet(num_class=19)
+            self.face_parser.load_state_dict(load_file(args.face_parser_model_path), strict=True)
+            self.face_parser.eval()
 
         self.face_detector = RetinaFace(
             gpu_id=0,
@@ -176,12 +179,12 @@ class GhostV2Module(L.LightningModule):
             cv2.imwrite(self.debug_source_face_path, Xs_face)
             cv2.imwrite(self.debug_target_face_path, Xt_face)
 
-        Xs_face = convert_to_batch_tensor(Xs_face, self.device)
-        Xt_face = convert_to_batch_tensor(Xt_face, self.device)
+        Xs_face_tensor = convert_to_batch_tensor(Xs_face, self.device)
+        Xt_face_tensor = convert_to_batch_tensor(Xt_face, self.device)
 
         with torch.no_grad():
-            Xs_embed = get_face_embeddings(Xs_face, self.embedding_model, self.face_embeddings)
-            Yt_face, _ = self.G(Xt_face, Xs_embed)
+            Xs_embed = get_face_embeddings(Xs_face_tensor, self.embedding_model, self.face_embeddings)
+            Yt_face, _ = self.G(Xt_face_tensor, Xs_embed)
             Yt_face = torch2image(Yt_face)[:, :, ::-1]
 
         if self.enhance_output:
@@ -195,11 +198,14 @@ class GhostV2Module(L.LightningModule):
             os.makedirs(os.path.dirname(self.debug_swapped_face_path), exist_ok=True)
             cv2.imwrite(self.debug_swapped_face_path, Yt_face_enhanced)
 
-        Yt_image = paste_face_back(self.face_parser, Xt_image, Yt_face_enhanced, Xt_affine_matrix, self.device)
-        if np.max(Yt_image) > 256:  # 16-bit image
-            Yt_image = Yt_image.astype(np.uint16)
+        if self.paste_back_mode == "facexlib_with_parser":
+            Yt_image = paste_face_back_facexlib(self.face_parser, Xt_image, Yt_face_enhanced, Xt_affine_matrix, True, self.device)
+        elif self.paste_back_mode == "facexlib_without_parser":
+            Yt_image = paste_face_back_facexlib(self.face_parser, Xt_image, Yt_face_enhanced, Xt_affine_matrix, False, self.device)
+        elif self.paste_back_mode == "insightface":
+            Yt_image = paste_face_back_insightface(Xt_image, Xt_face, Yt_face_enhanced, Xt_affine_matrix)
         else:
-            Yt_image = Yt_image.astype(np.uint8)
+            Yt_image = Yt_face_enhanced
 
         return Yt_image
 
