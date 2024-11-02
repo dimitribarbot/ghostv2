@@ -49,10 +49,10 @@ src5 = np.array([[54.796, 49.990], [60.771, 50.115], [76.673, 69.007],
                  [55.388, 89.702], [61.257, 89.050]],
                 dtype=np.float32)
 
-# arcface_dst = np.array(
-#     [[38.2946, 51.6963], [73.5318, 51.5014], [56.0252, 71.7366],
-#      [41.5493, 92.3655], [70.7299, 92.2041]],
-#     dtype=np.float32)
+arcface_dst = np.array(
+    [[38.2946, 51.6963], [73.5318, 51.5014], [56.0252, 71.7366],
+     [41.5493, 92.3655], [70.7299, 92.2041]],
+    dtype=np.float32)
 
 
 # standard 5 landmarks for FFHQ faces with 512 x 512
@@ -206,7 +206,7 @@ def get_faceswap(source_path: str,
 
 
 # Modified from https://github.com/deepinsight/insightface/blob/e896172e45157d5101448b5b9e327073073bfb1b/python-package/insightface/utils/face_align.py
-def estimate_norm(lmk: np.ndarray, image_size=224):
+def estimate_norm_v1(lmk: np.ndarray, image_size=224):
     assert lmk.shape == (5, 2)
     tform = trans.SimilarityTransform()
     lmk_tran = np.insert(lmk, 2, values=np.ones(5), axis=1)
@@ -214,6 +214,7 @@ def estimate_norm(lmk: np.ndarray, image_size=224):
     min_index = []
     min_error = float('inf')
     # src = face_template_src * (image_size / 512)
+    # src = arcface_src * (image_size / 112)
     src = default_template_src * (image_size / 112)
     for i in np.arange(src.shape[0]):
         tform.estimate(lmk, src[i])
@@ -221,7 +222,6 @@ def estimate_norm(lmk: np.ndarray, image_size=224):
         results = np.dot(M, lmk_tran.T)
         results = results.T
         error = np.sum(np.sqrt(np.sum((results - src[i])**2, axis=1)))
-        #         print(error)
         if error < min_error:
             min_error = error
             min_M = M
@@ -229,9 +229,34 @@ def estimate_norm(lmk: np.ndarray, image_size=224):
     return min_M, min_index
 
 
+# Modified from https://github.com/deepinsight/insightface/blob/master/python-package/insightface/utils/face_align.py
+def estimate_norm_v2(lmk: np.ndarray, image_size=224):
+    assert lmk.shape == (5, 2)
+    assert image_size % 112 == 0 or image_size % 128 == 0
+    if image_size % 112 == 0:
+        ratio = float(image_size) / 112.0
+        diff_x = 0
+    else:
+        ratio = float(image_size) / 128.0
+        diff_x = 8.0 * ratio
+    dst = arcface_dst * ratio
+    dst[:, 0] += diff_x
+    tform = trans.SimilarityTransform()
+    tform.estimate(lmk, dst)
+    M = tform.params[0:2, :]
+    return M
+
+
 # Modified from https://github.com/deepinsight/insightface/blob/e896172e45157d5101448b5b9e327073073bfb1b/python-package/insightface/utils/face_align.py
-def norm_crop(bgr_image: cv2.typing.MatLike, landmark, face_size=224):
-    M, _ = estimate_norm(landmark, face_size)
+def norm_crop_v1(bgr_image: cv2.typing.MatLike, landmark, face_size=224):
+    M, _ = estimate_norm_v1(landmark, face_size)
+    warped = cv2.warpAffine(bgr_image, M, (face_size, face_size), borderValue=0.0)
+    return warped, M
+
+
+# Modified from https://github.com/deepinsight/insightface/blob/master/python-package/insightface/utils/face_align.py
+def norm_crop_v2(bgr_image: cv2.typing.MatLike, landmark, face_size=224):
+    M = estimate_norm_v2(landmark, face_size)
     warped = cv2.warpAffine(bgr_image, M, (face_size, face_size), borderValue=0.0)
     return warped, M
 
@@ -288,8 +313,10 @@ def get_aligned_face_and_affine_matrix(
     aligner: Optional[DifferentiableFaceAligner] = None,
     device: Optional[torch.device]=None,
 ):
-    if align_mode == "insightface":
-        return norm_crop(bgr_image, landmarks, face_size=face_size)
+    if align_mode == "insightface_v1":
+        return norm_crop_v1(bgr_image, landmarks, face_size=face_size)
+    elif align_mode == "insightface_v2":
+        return norm_crop_v2(bgr_image, landmarks, face_size=face_size)
     elif align_mode == "mtcnn":
         return get_aligned_face(bgr_image, landmarks, face_size=face_size)
     elif align_mode == "cvlface":

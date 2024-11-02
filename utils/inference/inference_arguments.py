@@ -52,7 +52,7 @@ class InferenceArguments:
     enhance_output: bool = flag(default=True, negative_prefix="--no-")
     source_face_index: int = 0
     target_face_index: int = 0
-    align_mode: str = choice("facexlib", "insightface", "mtcnn", "cvlface", default="insightface")
+    align_mode: str = choice("facexlib", "insightface_v1", "insightface_v2", "mtcnn", "cvlface", default="insightface_v2")
     paste_back_mode: str = choice("facexlib_with_parser", "facexlib_without_parser", "insightface", "none", default="insightface")
 
     """ Debug arguments """

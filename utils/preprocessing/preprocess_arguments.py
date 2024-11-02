@@ -28,7 +28,7 @@ class PreprocessArguments:
     min_original_image_size: int = 250
     eye_dist_threshold: int = 5
     final_crop_size: int = 256
-    align_mode: str = choice("facexlib", "insightface", "mtcnn", "cvlface", default="insightface")
+    align_mode: str = choice("facexlib", "insightface_v1", "insightface_v2", "mtcnn", "cvlface", default="insightface_v2")
     stop_if_error: bool = flag(default=False, negative_prefix="--no-")
 
     """ Retargeting options """

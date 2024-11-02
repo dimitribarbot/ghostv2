@@ -30,8 +30,8 @@ class EmbeddingDistanceArguments:
     device_id: int = 0
     source_crop_size: int = 256
     target_crop_size: int = 112
-    source_align_mode: str = choice("facexlib", "insightface", "mtcnn", "cvlface", "original_cvlface", default="insightface")
-    target_align_mode: str = choice("facexlib", "insightface", "mtcnn", "cvlface", "original_cvlface", default="cvlface")
+    source_align_mode: str = choice("facexlib", "insightface_v1", "insightface_v2", "mtcnn", "cvlface", "original_cvlface", default="insightface_v2")
+    target_align_mode: str = choice("facexlib", "insightface_v1", "insightface_v2", "mtcnn", "cvlface", "original_cvlface", default="cvlface")
 
     """ Debug arguments """
     debug: bool = flag(default=False, negative_prefix="--no-")
