@@ -179,7 +179,7 @@ def get_face_embeddings(source: torch.Tensor, model: Any, face_embeddings: str):
     model_size = [160, 160] if face_embeddings == "facenet" else [112, 112]
     input = F.interpolate(source, model_size, mode="bilinear")
     embeddings = model(input)
-    # embeddings = F.normalize(embeddings)
+    embeddings = F.normalize(embeddings)
     return embeddings
 
 
