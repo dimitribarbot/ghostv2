@@ -139,7 +139,7 @@ class GhostV2Module(L.LightningModule):
         else:
             self.model_ft=None
 
-        self.register_buffer("loss_adv_accumulated", torch.tensor(20.))
+        self.register_buffer("loss_adv_accumulated", torch.tensor(self.args.initial_loss_adv_accumulated))
 
     
     def training_step(self, batch):
@@ -190,7 +190,7 @@ class GhostV2Module(L.LightningModule):
         opt_D.optimizer.zero_grad()
         lossD = compute_discriminator_loss(self.D, Y, Xs, diff_person)
         self.manual_backward(lossD)
-        if (not self.args.discr_force) or (self.loss_adv_accumulated < 4.):
+        if (not self.args.discr_force) or (self.loss_adv_accumulated < self.args.loss_adv_accumulated_threshold):
             opt_D.step()
         if self.args.use_scheduler:
             scheduler_D.step()
@@ -324,6 +324,11 @@ class GhostV2WandbCallback(L.Callback):
     def on_train_batch_end(self, trainer, pl_module: GhostV2Module, outputs, batch, batch_idx):
         if pl_module.args.eye_detector_loss:
             wandb.log({"loss_eyes": outputs["loss_eyes"].item(),
+                       "trainer/global_step": pl_module.global_step}, commit=False)
+        if pl_module.args.use_scheduler:
+            scheduler_G, scheduler_D = pl_module.lr_schedulers()
+            wandb.log({"scheduler_G_lr": scheduler_G.get_last_lr(),
+                       "scheduler_D_lr": scheduler_D.get_last_lr(),
                        "trainer/global_step": pl_module.global_step}, commit=False)
         wandb.log({"loss_id": outputs["loss_id"].item(),
                    "lossD": outputs["lossD"].item(),

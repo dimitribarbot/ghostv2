@@ -43,8 +43,10 @@ class TrainingArguments:
     same_identity: bool = flag(default=True, negative_prefix="--no-")       # Using simswap approach, when source_id = target_id. Only possible with laion=True
     diff_eq_same: bool = flag(default=False, negative_prefix="--no-")       # Don't use info about where is different identities
     pretrained: bool = flag(default=True, negative_prefix="--no-")          # If using the pretrained weights for training or not
-    discr_force: bool = flag(default=False, negative_prefix="--no-")        # If True Discriminator would not train when adversarial loss is high
-    use_scheduler: bool = flag(default=False, negative_prefix="--no-")      # If True decreasing LR is used for learning of generator and discriminator
+    discr_force: bool = flag(default=False, negative_prefix="--no-")        # If True, discriminator would not train when adversarial loss is high
+    initial_loss_adv_accumulated: float = 20.0                              # Initial accumulated adverserial loss
+    loss_adv_accumulated_threshold: float = 4.0                             # Accumulated adverserial loss threshold
+    use_scheduler: bool = flag(default=False, negative_prefix="--no-")      # If True, decreasing LR is used for learning of generator and discriminator
     scheduler_type: str = choice("step", "one_cycle", default="step")
     scheduler_step: int = 5000                                              # Parameter for StepLR scheduler
     scheduler_gamma: float = 0.2                                            # Parameter for StepLR scheduler, value which shows how many times to decrease LR
