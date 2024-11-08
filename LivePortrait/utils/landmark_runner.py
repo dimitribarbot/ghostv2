@@ -1,48 +1,12 @@
 import cv2
 import numpy as np
 
-from builtins import getattr, set
 import torch
-from torch.nn.modules import Module
-from torch.nn.modules.linear import Linear
-from torch.nn.modules.conv import Conv2d
-from torch.fx.graph_module import reduce_graph_module
-from torch._C import _VariableFunctionsClass
-from onnx2torch.node_converters.identity import OnnxCopyIdentity
-from onnx2torch.node_converters.reduce import OnnxReduceStaticAxes
-from onnx2torch.node_converters.binary_math_operations import OnnxBinaryMathOperation, _onnx_div
-from onnx2torch.node_converters.constant import OnnxConstant
-from onnx2torch.node_converters.pow import OnnxPow, OnnxSqrt
-from onnx2torch.node_converters.transpose import OnnxTranspose
-from onnx2torch.node_converters.matmul import OnnxMatMul
-from onnx2torch.node_converters.activations import OnnxErf
-from onnx2torch.node_converters.reshape import OnnxReshape
-from onnx2torch.node_converters.concat import OnnxConcat
+from safetensors.torch import load_model
 
+from LivePortrait.modules.landmark import Landmark
 from LivePortrait.utils.crop import crop_image, _transform_pts
 
-
-torch.serialization.add_safe_globals([
-    reduce_graph_module,
-    getattr,
-    _onnx_div,
-    set,
-    Module,
-    Linear,
-    Conv2d,
-    OnnxCopyIdentity,
-    OnnxReduceStaticAxes,
-    OnnxBinaryMathOperation,
-    OnnxConstant,
-    OnnxPow,
-    OnnxSqrt,
-    OnnxTranspose,
-    OnnxMatMul,
-    OnnxErf,
-    OnnxReshape,
-    OnnxConcat,
-    _VariableFunctionsClass
-])
 
 def to_ndarray(obj):
     if isinstance(obj, torch.Tensor):
@@ -57,13 +21,18 @@ class LandmarkRunner(object):
     def __init__(self, **kwargs):
         self.device = kwargs.get('device')
         self.dsize = kwargs.get('dsize', 224)
+        
         ckpt_path = kwargs.get('ckpt_path')
 
-        self.model = torch.load(ckpt_path, weights_only=True).to(self.device)
+        self.model = Landmark()
+        load_model(self.model, ckpt_path)
+        self.model = self.model.to(self.device)
+        self.model.eval()
 
     def _run(self, inp):
         input = torch.from_numpy(inp).to(self.device)
-        out = self.model(input)
+        with torch.no_grad():
+            out = self.model(input)
         return out
 
     def run(self, img_rgb: np.ndarray, lmk=None):
