@@ -216,16 +216,20 @@ class GhostV2Module(L.LightningModule):
         opt_D = optim.Adam(self.D.parameters(), lr=self.args.lr_D, betas=(self.args.b1_D, self.args.b2_D), weight_decay=self.args.wd_D)
 
         if self.args.use_scheduler:
-            if self.args.scheduler_type == "one_cycle":
-                total_steps = self.trainer.estimated_stepping_batches if self.args.scheduler_total_steps == -1 else self.args.scheduler_total_steps
+            if self.args.scheduler_type_G == "one_cycle":
+                total_steps = self.trainer.estimated_stepping_batches if self.args.scheduler_total_steps_G == -1 else self.args.scheduler_total_steps_G
                 print(f"Using OneCycleLR scheduler with max_lr_G={self.args.lr_G} and total_steps={total_steps} for G.")
-                scheduler_G = scheduler.OneCycleLR(opt_G, max_lr=self.args.lr_G, total_steps=total_steps, last_epoch=self.args.scheduler_last_batches)
-                print(f"Using OneCycleLR scheduler with max_lr_D={self.args.lr_D} and total_steps={total_steps} for D.")
-                scheduler_D = scheduler.OneCycleLR(opt_D, max_lr=self.args.lr_D, total_steps=total_steps, last_epoch=self.args.scheduler_last_batches)
+                scheduler_G = scheduler.OneCycleLR(opt_G, max_lr=self.args.lr_G, total_steps=total_steps, last_epoch=self.args.scheduler_last_batches_G)
             else:
-                print(f"Using StepLR scheduler with step_size={self.args.scheduler_step} and gamma={self.args.scheduler_gamma} for G and D.")
-                scheduler_G = scheduler.StepLR(opt_G, step_size=self.args.scheduler_step, gamma=self.args.scheduler_gamma)
-                scheduler_D = scheduler.StepLR(opt_D, step_size=self.args.scheduler_step, gamma=self.args.scheduler_gamma)
+                print(f"Using StepLR scheduler with step_size={self.args.scheduler_step_G} and gamma={self.args.scheduler_gamma_G} for G.")
+                scheduler_G = scheduler.StepLR(opt_G, step_size=self.args.scheduler_step_G, gamma=self.args.scheduler_gamma_G)
+            if self.args.scheduler_type_D == "one_cycle":
+                total_steps = self.trainer.estimated_stepping_batches if self.args.scheduler_total_steps_D == -1 else self.args.scheduler_total_steps_D
+                print(f"Using OneCycleLR scheduler with max_lr_D={self.args.lr_D} and total_steps={total_steps} for D.")
+                scheduler_D = scheduler.OneCycleLR(opt_D, max_lr=self.args.lr_D, total_steps=total_steps, last_epoch=self.args.scheduler_last_batches_D)
+            else:
+                print(f"Using StepLR scheduler with step_size={self.args.scheduler_step_D} and gamma={self.args.scheduler_gamma_D} for D.")
+                scheduler_D = scheduler.StepLR(opt_D, step_size=self.args.scheduler_step_D, gamma=self.args.scheduler_gamma_D)
             return [opt_G, opt_D], [scheduler_G, scheduler_D]
 
         return [opt_G, opt_D], []
@@ -301,7 +305,11 @@ class GhostV2LoggingCallback(L.Callback):
             print(f"loss_adv_accumulated: {pl_module.loss_adv_accumulated}")
             if pl_module.args.use_scheduler:
                 scheduler_G, scheduler_D = pl_module.lr_schedulers()
-                print(f"scheduler_G lr: {scheduler_G.get_last_lr()} scheduler_D lr: {scheduler_D.get_last_lr()}")
+                last_lr_G = scheduler_G.get_last_lr()
+                last_lr_D = scheduler_D.get_last_lr()
+                lr_G = last_lr_G[0] if isinstance(last_lr_G, list) and len(last_lr_G) > 0 else last_lr_G
+                lr_D = last_lr_D[0] if isinstance(last_lr_D, list) and len(last_lr_D) > 0 else last_lr_D
+                print(f"scheduler_G lr: {lr_G} scheduler_D lr: {lr_D}")
     
 
 class GhostV2CheckpointCallback(L.Callback):
@@ -327,8 +335,12 @@ class GhostV2WandbCallback(L.Callback):
                        "trainer/global_step": pl_module.global_step}, commit=False)
         if pl_module.args.use_scheduler:
             scheduler_G, scheduler_D = pl_module.lr_schedulers()
-            wandb.log({"scheduler_G_lr": scheduler_G.get_last_lr(),
-                       "scheduler_D_lr": scheduler_D.get_last_lr(),
+            last_lr_G = scheduler_G.get_last_lr()
+            last_lr_D = scheduler_D.get_last_lr()
+            lr_G = last_lr_G[0] if isinstance(last_lr_G, list) and len(last_lr_G) > 0 else last_lr_G
+            lr_D = last_lr_D[0] if isinstance(last_lr_D, list) and len(last_lr_D) > 0 else last_lr_D
+            wandb.log({"scheduler_G_lr": lr_G,
+                       "scheduler_D_lr": lr_D,
                        "trainer/global_step": pl_module.global_step}, commit=False)
         wandb.log({"loss_id": outputs["loss_id"].item(),
                    "lossD": outputs["lossD"].item(),
@@ -371,8 +383,16 @@ def main(args: TrainingArguments):
             "diff_eq_same": args.diff_eq_same,
             "discr_force": args.discr_force,
             "scheduler": args.use_scheduler,
-            "scheduler_step": args.scheduler_step,
-            "scheduler_gamma": args.scheduler_gamma,
+            "scheduler_type_G": args.scheduler_type_G,
+            "scheduler_type_D": args.scheduler_type_D,
+            "scheduler_step_G": args.scheduler_step_G,
+            "scheduler_gamma_G": args.scheduler_gamma_G,
+            "scheduler_step_D": args.scheduler_step_D,
+            "scheduler_gamma_D": args.scheduler_gamma_D,
+            "scheduler_total_steps_G": args.scheduler_total_steps_G,
+            "scheduler_last_batches_G": args.scheduler_last_batches_G,
+            "scheduler_total_steps_D": args.scheduler_total_steps_D,
+            "scheduler_last_batches_D": args.scheduler_last_batches_D,
             "eye_detector_loss": args.eye_detector_loss,
             "pretrained": args.pretrained,
             "run_name": args.run_name,

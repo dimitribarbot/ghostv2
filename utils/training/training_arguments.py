@@ -47,11 +47,16 @@ class TrainingArguments:
     initial_loss_adv_accumulated: float = 20.0                              # Initial accumulated adverserial loss
     loss_adv_accumulated_threshold: float = 4.0                             # Accumulated adverserial loss threshold
     use_scheduler: bool = flag(default=False, negative_prefix="--no-")      # If True, decreasing LR is used for learning of generator and discriminator
-    scheduler_type: str = choice("step", "one_cycle", default="step")
-    scheduler_step: int = 5000                                              # Parameter for StepLR scheduler
-    scheduler_gamma: float = 0.2                                            # Parameter for StepLR scheduler, value which shows how many times to decrease LR
-    scheduler_total_steps: int = -1                                         # Parameter for OneCycleLR scheduler, leave to -1 to automatically compute it from max_epoch
-    scheduler_last_batches: int = -1                                        # Parameter for OneCycleLR scheduler, leave to -1 to start from scratch
+    scheduler_type_G: str = choice("step", "one_cycle", default="step")
+    scheduler_step_G: int = 5000                                            # Parameter for StepLR scheduler for G
+    scheduler_gamma_G: float = 0.2                                          # Parameter for StepLR scheduler for G, value which shows how many times to decrease LR
+    scheduler_total_steps_G: int = -1                                       # Parameter for OneCycleLR scheduler for G, leave to -1 to automatically compute it from max_epoch
+    scheduler_last_batches_G: int = -1                                      # Parameter for OneCycleLR scheduler for G, leave to -1 to start from scratch
+    scheduler_type_D: str = choice("step", "one_cycle", default="step")
+    scheduler_step_D: int = 5000                                            # Parameter for StepLR scheduler for D
+    scheduler_gamma_D: float = 0.2                                          # Parameter for StepLR scheduler for D, value which shows how many times to decrease LR
+    scheduler_total_steps_D: int = -1                                       # Parameter for OneCycleLR scheduler for D, leave to -1 to automatically compute it from max_epoch
+    scheduler_last_batches_D: int = -1                                      # Parameter for OneCycleLR scheduler for D, leave to -1 to start from scratch
     eye_detector_loss: bool = flag(default=False, negative_prefix="--no-")  # If True eye loss with using AdaptiveWingLoss detector is applied to generator
     align_mode: str = choice("facexlib", "insightface_v1", "insightface_v2", "mtcnn", "cvlface", default="insightface_v2")
 
