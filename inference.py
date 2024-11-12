@@ -12,7 +12,6 @@ from safetensors.torch import load_file
 import lightning as L
 
 from network.AEI_Net import *
-from network.MultiscaleDiscriminator import *
 from utils.inference.inference_arguments import InferenceArguments
 from utils.image_processing import get_face_embeddings, convert_to_batch_tensor, \
     torch2image, paste_face_back_facexlib, paste_face_back_insightface, enhance_face, sort_faces_by_coordinates, get_aligned_face_and_affine_matrix
@@ -227,7 +226,7 @@ def main(args: InferenceArguments):
     with trainer.init_module():
         model = GhostV2Module(args)
     
-    print("Starting training")
+    print("Starting inference")
     output = trainer.predict(model, dm)[0]
 
     print("Saving result to output")
