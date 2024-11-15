@@ -58,7 +58,6 @@ class TrainingArguments:
     scheduler_total_steps_D: int = -1                                       # Parameter for OneCycleLR scheduler for D, leave to -1 to automatically compute it from max_epoch
     scheduler_last_batches_D: int = -1                                      # Parameter for OneCycleLR scheduler for D, leave to -1 to start from scratch
     eye_detector_loss: bool = flag(default=False, negative_prefix="--no-")  # If True eye loss with using AdaptiveWingLoss detector is applied to generator
-    align_mode: str = choice("facexlib", "insightface_v1", "insightface_v2", "mtcnn", "cvlface", default="insightface_v2")
 
     """ W&B logging """
     use_wandb: bool = flag(default=False, negative_prefix="--no-")          # Use wandb to track your experiments or not

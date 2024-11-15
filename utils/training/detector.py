@@ -2,7 +2,8 @@ import torch
 import cv2
 from PIL import Image
 import torchvision.transforms as transforms
-from ..image_processing import torch2image
+
+from utils.image_processing import torch2image
 
 
 transforms_base = transforms.Compose([

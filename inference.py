@@ -13,8 +13,17 @@ import lightning as L
 
 from network.AEI_Net import *
 from utils.inference.inference_arguments import InferenceArguments
-from utils.image_processing import get_face_embeddings, convert_to_batch_tensor, \
-    torch2image, paste_face_back_facexlib, paste_face_back_insightface, enhance_face, sort_faces_by_coordinates, get_aligned_face_and_affine_matrix
+from utils.image_processing import (
+    get_face_embeddings,
+    convert_to_batch_tensor,
+    trans_points2d,
+    torch2image,
+    paste_face_back_facexlib,
+    paste_face_back_insightface,
+    enhance_face,
+    sort_faces_by_coordinates,
+    get_aligned_face_and_affine_matrix
+)
 from utils.inference.Dataset import FaceEmbed
 from CVLFace import get_aligner
 from BiSeNet.bisenet import BiSeNet
@@ -69,6 +78,7 @@ class GhostV2Module(L.LightningModule):
         self.debug_source_face_path = args.debug_source_face_path
         self.debug_target_face_path = args.debug_target_face_path
         self.debug_swapped_face_path = args.debug_swapped_face_path
+        self.debug_enhanced_face_path = args.debug_enhanced_face_path
         
         checkpoint = load_file(args.G_path)
         checkpoint = { k.replace("_orig_mod.", ""): v for k,v in checkpoint.items() }
@@ -186,6 +196,10 @@ class GhostV2Module(L.LightningModule):
             Yt_face, _ = self.G(Xt_face_tensor, Xs_embed)
             Yt_face = torch2image(Yt_face)[:, :, ::-1]
 
+        if self.debug:
+            os.makedirs(os.path.dirname(self.debug_swapped_face_path), exist_ok=True)
+            cv2.imwrite(self.debug_swapped_face_path, Yt_face)
+
         if self.enhance_output:
             Yt_face_enhanced = cv2.resize(Yt_face, (512, 512), interpolation=cv2.INTER_LINEAR)
             Yt_face_enhanced = enhance_face(self.gfpgan, Yt_face_enhanced, "output", self.device)
@@ -194,8 +208,8 @@ class GhostV2Module(L.LightningModule):
             Yt_face_enhanced = Yt_face
 
         if self.debug:
-            os.makedirs(os.path.dirname(self.debug_swapped_face_path), exist_ok=True)
-            cv2.imwrite(self.debug_swapped_face_path, Yt_face_enhanced)
+            os.makedirs(os.path.dirname(self.debug_enhanced_face_path), exist_ok=True)
+            cv2.imwrite(self.debug_enhanced_face_path, Yt_face_enhanced)
 
         if self.paste_back_mode == "facexlib_with_parser":
             Yt_image = paste_face_back_facexlib(self.face_parser, Xt_image, Yt_face_enhanced, Xt_affine_matrix, True, self.device)

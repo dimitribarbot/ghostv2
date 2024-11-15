@@ -60,3 +60,4 @@ class InferenceArguments:
     debug_source_face_path: str = make_real_path("./examples/results/inference/source_face.jpg")
     debug_target_face_path: str = make_real_path("./examples/results/inference/target_face.jpg")
     debug_swapped_face_path: str = make_real_path("./examples/results/inference/swapped_face.jpg")
+    debug_enhanced_face_path: str = make_real_path("./examples/results/inference/enhanced_face.jpg")
