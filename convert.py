@@ -21,7 +21,7 @@ def process_one_image(
     source_image: str,
     save_path: str,
 ):
-    image = cv2.imread(source_image, cv2.IMREAD_COLOR)
+    image = cv2.imread(source_image)
     os.makedirs(os.path.dirname(save_path), exist_ok=True)
     cv2.imwrite(save_path, image)
     return save_path

@@ -11,8 +11,8 @@ class FaceEmbed(Dataset):
 
     def __getitem__(self, item: int):
 
-        Xs_image = cv2.imread(self.Xs_image_path, cv2.IMREAD_COLOR)
-        Xt_image = cv2.imread(self.Xt_image_path, cv2.IMREAD_COLOR)
+        Xs_image = cv2.imread(self.Xs_image_path)
+        Xt_image = cv2.imread(self.Xt_image_path)
             
         return Xs_image, Xt_image
 

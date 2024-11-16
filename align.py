@@ -33,7 +33,7 @@ def process_one_image(
     aligner: Optional[DifferentiableFaceAligner],
     device: Optional[torch.device]=None,
 ):
-    image = cv2.imread(source_image, cv2.IMREAD_COLOR)
+    image = cv2.imread(source_image)
 
     os.makedirs(os.path.dirname(save_path), exist_ok=True)
 

@@ -32,7 +32,6 @@ from CVLFace import get_aligner
 from BiSeNet.bisenet import BiSeNet
 from GFPGAN.gfpganv1_clean_arch import GFPGANv1Clean
 from RetinaFace.detector import RetinaFace
-from utils.masks import face_mask_static
 
 print("finished imports")
 
