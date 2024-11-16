@@ -14,7 +14,6 @@ class PreprocessArguments:
     gfpgan_model_path: str = make_real_path("./weights/GFPGAN/GFPGANCleanv1-NoCE-C2.safetensors")
     face_parser_model_path: str = make_real_path("./weights/BiSeNet/79999_iter.safetensors")
     retina_face_model_path: str = make_real_path("./weights/RetinaFace/Resnet50_Final.safetensors")
-    face_alignment_model_path: str = make_real_path("./weights/FaceAlignment/s3fd-619a316812.safetensors")
     cvlface_aligner_model_path: str = make_real_path("./weights/CVLFace/cvlface_DFA_mobilenet.safetensors")
     live_portrait_landmark_model_path: str = make_real_path("./weights/LivePortrait/landmark.safetensors")
     live_portrait_F_model_path: str = make_real_path("./weights/LivePortrait/appearance_feature_extractor.safetensors")

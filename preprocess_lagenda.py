@@ -116,9 +116,9 @@ def main(args: PreprocessLagendaArguments):
         flip_input=False,
         device=device,
         dtype=torch.float16,
-        face_detector="sfd",
+        face_detector="retinaface",
         face_detector_kwargs={
-            "path_to_detector": args.face_alignment_model_path
+            "path_to_detector": args.retina_face_model_path
         }
     )
 

@@ -7,15 +7,18 @@ from simple_parsing import ArgumentParser
 
 import cv2
 import torch
+import numpy as np
 from torch.utils.data import DataLoader
 from safetensors.torch import load_file
 import lightning as L
 
+from face_alignment.api import FaceAlignment, LandmarksType
 from network.AEI_Net import *
 from utils.inference.inference_arguments import InferenceArguments
 from utils.image_processing import (
     get_face_embeddings,
     convert_to_batch_tensor,
+    paste_face_back_ghost,
     trans_points2d,
     torch2image,
     paste_face_back_facexlib,
@@ -29,6 +32,7 @@ from CVLFace import get_aligner
 from BiSeNet.bisenet import BiSeNet
 from GFPGAN.gfpganv1_clean_arch import GFPGANv1Clean
 from RetinaFace.detector import RetinaFace
+from utils.masks import face_mask_static
 
 print("finished imports")
 
@@ -145,6 +149,18 @@ class GhostV2Module(L.LightningModule):
             model_path=args.retina_face_model_path
         )
 
+        self.face_alignment = None
+        if args.paste_back_mode == "ghost":
+            self.face_alignment = FaceAlignment(
+                LandmarksType.TWO_D,
+                flip_input=False,
+                dtype=torch.float16,
+                face_detector="retinaface",
+                face_detector_kwargs={
+                    "path_to_detector": args.retina_face_model_path
+                }
+            )
+
         self.aligner = None
         if args.align_mode == "cvlface":
             self.aligner = get_aligner(args.cvlface_aligner_model_path)
@@ -177,10 +193,25 @@ class GhostV2Module(L.LightningModule):
         Xt_face_kps = Xt_detected_faces[self.target_face_index]["kps"]
 
         print(f"Aligning source and target images using {self.align_mode} align mode")
-        Xs_face, _ = get_aligned_face_and_affine_matrix(
+        Xs_face, Xs_affine_matrix = get_aligned_face_and_affine_matrix(
             Xs_image, Xs_face_kps, face_size=256, align_mode=self.align_mode, aligner=self.aligner, device=self.device)
         Xt_face, Xt_affine_matrix = get_aligned_face_and_affine_matrix(
             Xt_image, Xt_face_kps, face_size=256, align_mode=self.align_mode, aligner=self.aligner, device=self.device)
+
+        if self.paste_back_mode == "ghost":
+            Xs_face_box = Xs_detected_faces[self.source_face_index]["box"]
+            Xt_face_box = Xt_detected_faces[self.target_face_index]["box"]
+
+            Xs_landmarks_68 = self.face_alignment.get_landmarks_from_image(
+                Xs_image[:, :, ::-1],
+                detected_faces=[Xs_face_box],
+            )[0]
+            Xt_landmarks_68 = self.face_alignment.get_landmarks_from_image(
+                Xt_image[:, :, ::-1],
+                detected_faces=[Xt_face_box],
+            )[0]
+            Xs_face_landmarks_68 = trans_points2d(Xs_landmarks_68, Xs_affine_matrix)
+            Xt_face_landmarks_68 = trans_points2d(Xt_landmarks_68, Xt_affine_matrix)
         
         if self.debug:
             os.makedirs(os.path.dirname(self.debug_source_face_path), exist_ok=True)
@@ -217,6 +248,8 @@ class GhostV2Module(L.LightningModule):
             Yt_image = paste_face_back_facexlib(self.face_parser, Xt_image, Yt_face_enhanced, Xt_affine_matrix, False, self.device)
         elif self.paste_back_mode == "insightface":
             Yt_image = paste_face_back_insightface(Xt_image, Xt_face, Yt_face_enhanced, Xt_affine_matrix)
+        elif self.paste_back_mode == "ghost":
+            Yt_image = paste_face_back_ghost(Xt_image, Xs_face, Yt_face_enhanced, Xs_face_landmarks_68, Xt_face_landmarks_68, Xt_affine_matrix)
         else:
             Yt_image = Yt_face_enhanced
 

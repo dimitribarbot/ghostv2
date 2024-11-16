@@ -19,6 +19,7 @@ from BiSeNet.bisenet import BiSeNet
 from CVLFace.differentiable_face_aligner import DifferentiableFaceAligner
 from GFPGAN.gfpganv1_clean_arch import GFPGANv1Clean
 from utils.adaface_align_trans import get_reference_facial_points, warp_and_crop_face
+from utils.masks import face_mask_static
 
 
 transformer_embeddings = transforms.Compose([
@@ -491,6 +492,25 @@ def paste_face_back_insightface(
     fake_merged = img_mask * restored_face + (1-img_mask) * target_img.astype(np.float32)
     fake_merged = fake_merged.astype(np.uint8)
     return fake_merged
+
+
+def paste_face_back_ghost(
+    original_image: cv2.typing.MatLike,
+    source_face: cv2.typing.MatLike,
+    restored_face: cv2.typing.MatLike,
+    source_face_landmarks_68: cv2.typing.MatLike,
+    target_face_landmarks_68: cv2.typing.MatLike,
+    affine_matrix: np.ndarray,
+):
+    original_size = (original_image.shape[1], original_image.shape[0])
+    mask, _ = face_mask_static(source_face[:, :, ::-1], source_face_landmarks_68, target_face_landmarks_68)
+    mat_rev = cv2.invertAffineTransform(affine_matrix)
+    swap_t = cv2.warpAffine(restored_face, mat_rev, original_size, borderMode=cv2.BORDER_REPLICATE)
+    mask_t = cv2.warpAffine(mask, mat_rev, original_size)
+    mask_t = np.expand_dims(mask_t, 2)
+    final = mask_t * swap_t + (1 - mask_t) * original_image
+    final = np.array(final, dtype='uint8')
+    return final
 
 
 @torch.no_grad()
