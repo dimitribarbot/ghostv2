@@ -514,6 +514,18 @@ def paste_face_back_ghost(
 
 
 @torch.no_grad()
+def paste_face_back_basic(
+    original_image: cv2.typing.MatLike,
+    restored_face: cv2.typing.MatLike,
+    affine_matrix: np.ndarray,
+):
+    original_size = (original_image.shape[1], original_image.shape[0])
+    inverse_affine = cv2.invertAffineTransform(affine_matrix)
+    inv_restored = cv2.warpAffine(restored_face, inverse_affine, original_size)
+    return inv_restored
+
+
+@torch.no_grad()
 def enhance_face(
     gfpgan: GFPGANv1Clean,
     img_bgr: cv2.typing.MatLike,

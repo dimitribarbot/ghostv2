@@ -17,7 +17,7 @@ class InferenceArguments:
 
     """ Model params """
     G_path: str = make_real_path("./experiments/saved_models_ghost_v2_5_sch_part2/G_latest.safetensors")
-    gfpgan_model_path: str = make_real_path("./weights/GFPGAN/GFPGANCleanv1-NoCE-C2.safetensors")
+    gfpgan_model_path: str = make_real_path("./weights/GFPGAN/GFPGANv1.4.safetensors")
     face_parser_model_path: str = make_real_path("./weights/BiSeNet/79999_iter.safetensors")
     retina_face_model_path: str = make_real_path("./weights/RetinaFace/Resnet50_Final.safetensors")
     cvlface_aligner_model_path: str = make_real_path("./weights/CVLFace/cvlface_DFA_mobilenet.safetensors")
@@ -27,9 +27,10 @@ class InferenceArguments:
     cvl_adaface_model_path: str = make_real_path("./weights/CVLFace/cvlface_adaface_ir101_webface12m.safetensors")
     cvl_vit_model_path: str = make_real_path("./weights/CVLFace/cvlface_adaface_vit_base_webface4m.safetensors")
     facenet_model_path: str = make_real_path("./weights/Facenet/facenet_pytorch.safetensors")
-    face_embeddings: str = choice("facenet", "arcface", "adaface", "cvl_arcface", "cvl_adaface", "cvl_vit", default="facenet")
+    face_embeddings: str = choice("facenet", "arcface", "adaface", "cvl_arcface", "cvl_adaface", "cvl_vit", default="cvl_vit")
     backbone: str = choice("unet", "linknet", "resnet", default="unet")
     num_blocks: int = 2
+    align_corners: bool = flag(default=True, negative_prefix="--no-")
     precision: Optional[str] = choice(
         None,
         "64",
@@ -53,7 +54,7 @@ class InferenceArguments:
     source_face_index: int = 0
     target_face_index: int = 0
     align_mode: str = choice("facexlib", "insightface_v1", "insightface_v2", "mtcnn", "cvlface", default="insightface_v2")
-    paste_back_mode: str = choice("facexlib_with_parser", "facexlib_without_parser", "insightface", "ghost", "none", default="insightface")
+    paste_back_mode: str = choice("facexlib_with_parser", "facexlib_without_parser", "insightface", "ghost", "basic", "none", default="ghost")
 
     """ Debug arguments """
     debug: bool = flag(default=False, negative_prefix="--no-")

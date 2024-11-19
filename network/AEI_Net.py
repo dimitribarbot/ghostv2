@@ -42,9 +42,10 @@ class deconv4x4(nn.Module):
     
     
 class MLAttrEncoder(nn.Module):
-    def __init__(self, backbone):
+    def __init__(self, backbone, align_corners=True):
         super(MLAttrEncoder, self).__init__()
         self.backbone = backbone
+        self.align_corners = align_corners
         self.conv1 = conv4x4(3, 32)
         self.conv2 = conv4x4(32, 64)
         self.conv3 = conv4x4(64, 128)
@@ -91,13 +92,14 @@ class MLAttrEncoder(nn.Module):
         z_attr5 = self.deconv4(z_attr4, feat3, self.backbone)
         z_attr6 = self.deconv5(z_attr5, feat2, self.backbone)
         z_attr7 = self.deconv6(z_attr6, feat1, self.backbone)
-        z_attr8 = F.interpolate(z_attr7, scale_factor=2, mode='bilinear', align_corners=True)
+        z_attr8 = F.interpolate(z_attr7, scale_factor=2, mode='bilinear', align_corners=self.align_corners)
         return z_attr1, z_attr2, z_attr3, z_attr4, z_attr5, z_attr6, z_attr7, z_attr8
 
     
 class AADGenerator(nn.Module):
-    def __init__(self, backbone, c_id=256, num_blocks=2):
+    def __init__(self, backbone, c_id=256, num_blocks=2, align_corners=True):
         super(AADGenerator, self).__init__()
+        self.align_corners = align_corners
         self.up1 = nn.ConvTranspose2d(c_id, 1024, kernel_size=2, stride=1, padding=0)
         self.AADBlk1 = AAD_ResBlk(1024, 1024, 1024, c_id, num_blocks)
         if backbone == 'linknet':
@@ -121,26 +123,26 @@ class AADGenerator(nn.Module):
 
     def forward(self, z_attr, z_id):
         m = self.up1(z_id.reshape(z_id.shape[0], -1, 1, 1))
-        m2 = F.interpolate(self.AADBlk1(m, z_attr[0], z_id), scale_factor=2, mode='bilinear', align_corners=True)
-        m3 = F.interpolate(self.AADBlk2(m2, z_attr[1], z_id), scale_factor=2, mode='bilinear', align_corners=True)
-        m4 = F.interpolate(self.AADBlk3(m3, z_attr[2], z_id), scale_factor=2, mode='bilinear', align_corners=True)
-        m5 = F.interpolate(self.AADBlk4(m4, z_attr[3], z_id), scale_factor=2, mode='bilinear', align_corners=True)
-        m6 = F.interpolate(self.AADBlk5(m5, z_attr[4], z_id), scale_factor=2, mode='bilinear', align_corners=True)
-        m7 = F.interpolate(self.AADBlk6(m6, z_attr[5], z_id), scale_factor=2, mode='bilinear', align_corners=True)
-        m8 = F.interpolate(self.AADBlk7(m7, z_attr[6], z_id), scale_factor=2, mode='bilinear', align_corners=True)
+        m2 = F.interpolate(self.AADBlk1(m, z_attr[0], z_id), scale_factor=2, mode='bilinear', align_corners=self.align_corners)
+        m3 = F.interpolate(self.AADBlk2(m2, z_attr[1], z_id), scale_factor=2, mode='bilinear', align_corners=self.align_corners)
+        m4 = F.interpolate(self.AADBlk3(m3, z_attr[2], z_id), scale_factor=2, mode='bilinear', align_corners=self.align_corners)
+        m5 = F.interpolate(self.AADBlk4(m4, z_attr[3], z_id), scale_factor=2, mode='bilinear', align_corners=self.align_corners)
+        m6 = F.interpolate(self.AADBlk5(m5, z_attr[4], z_id), scale_factor=2, mode='bilinear', align_corners=self.align_corners)
+        m7 = F.interpolate(self.AADBlk6(m6, z_attr[5], z_id), scale_factor=2, mode='bilinear', align_corners=self.align_corners)
+        m8 = F.interpolate(self.AADBlk7(m7, z_attr[6], z_id), scale_factor=2, mode='bilinear', align_corners=self.align_corners)
         y = self.AADBlk8(m8, z_attr[7], z_id)
         return torch.tanh(y)
 
 
 
 class AEI_Net(nn.Module):
-    def __init__(self, backbone, num_blocks=2, c_id=256):
+    def __init__(self, backbone, num_blocks=2, c_id=256, align_corners=True):
         super(AEI_Net, self).__init__()
         if backbone in ['unet', 'linknet']:
-            self.encoder = MLAttrEncoder(backbone)
+            self.encoder = MLAttrEncoder(backbone, align_corners)
         elif backbone == 'resnet':
             self.encoder = MLAttrEncoderResnet()
-        self.generator = AADGenerator(backbone, c_id, num_blocks)
+        self.generator = AADGenerator(backbone, c_id, num_blocks, align_corners)
 
     def forward(self, Xt, z_id):
         attr = self.encoder(Xt)

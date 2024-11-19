@@ -86,11 +86,12 @@ class GhostV2Module(L.LightningModule):
 
         self.args = args
 
-        self.G = AEI_Net(args.backbone, num_blocks=args.num_blocks, c_id=512)
-        self.D = MultiscaleDiscriminator(input_nc=3, n_layers=5, norm_layer=torch.nn.InstanceNorm2d)
+        self.G = AEI_Net(args.backbone, num_blocks=args.num_blocks, c_id=512, align_corners=args.align_corners)
         self.G = cast(AEI_Net, torch.compile(self.G))
-        self.D = cast(MultiscaleDiscriminator, torch.compile(self.D))
         self.G.train()
+        
+        self.D = MultiscaleDiscriminator(input_nc=3, n_layers=5, norm_layer=torch.nn.InstanceNorm2d)
+        self.D = cast(MultiscaleDiscriminator, torch.compile(self.D))
         self.D.train()
 
         if self.args.pretrained and self.args.G_path is not None and self.args.D_path is not None:

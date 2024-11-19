@@ -13,7 +13,6 @@ import lightning as L
 from CVLFace import get_aligner
 from RetinaFace.detector import RetinaFace
 from inference import GhostV2DataModule, GhostV2Module
-from network.AEI_Net import *
 from utils.image_processing import get_aligned_face_and_affine_matrix
 from utils.inference.inference_arguments import InferenceArguments
 
@@ -91,14 +90,15 @@ def main(args: InferenceArguments):
         for j in range(6):
             if i > 0 or j > 0:
                 if image_grid[i][j] is not None:
-                    detected_faces = face_detector(image_grid[i][j], threshold=0.97, return_dict=True, cv=True)
-                    if len(detected_faces) == 0:
-                        raise ValueError(f"No face detected in image for source {i} and target {j}!")
-                    face_kps = detected_faces[0]["kps"]
-                    face, _ = get_aligned_face_and_affine_matrix(
-                        image_grid[i][j], face_kps, face_size=256, align_mode=args.align_mode, aligner=aligner, device=device)
-                    print(f"Setting face at indice ({i}, {j}) with shape {face.shape}")
-                    image_grid[i][j] = face
+                    if args.paste_back_mode != "none" or i == 0 or j == 0:
+                        detected_faces = face_detector(image_grid[i][j], threshold=0.97, return_dict=True, cv=True)
+                        if len(detected_faces) == 0:
+                            raise ValueError(f"No face detected in image for source {i} and target {j}!")
+                        face_kps = detected_faces[0]["kps"]
+                        face, _ = get_aligned_face_and_affine_matrix(
+                            image_grid[i][j], face_kps, face_size=256, align_mode=args.align_mode, aligner=aligner, device=device)
+                        print(f"Setting face at indice ({i}, {j}) with shape {face.shape}")
+                        image_grid[i][j] = face
                 else:
                     image_grid[i][j] = np.zeros_like(corner_image)
 

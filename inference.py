@@ -18,6 +18,7 @@ from utils.inference.inference_arguments import InferenceArguments
 from utils.image_processing import (
     get_face_embeddings,
     convert_to_batch_tensor,
+    paste_face_back_basic,
     paste_face_back_ghost,
     trans_points2d,
     torch2image,
@@ -86,7 +87,7 @@ class GhostV2Module(L.LightningModule):
         checkpoint = load_file(args.G_path)
         checkpoint = { k.replace("_orig_mod.", ""): v for k,v in checkpoint.items() }
 
-        self.G = AEI_Net(args.backbone, num_blocks=args.num_blocks, c_id=512)
+        self.G = AEI_Net(args.backbone, num_blocks=args.num_blocks, c_id=512, align_corners=args.align_corners)
         self.G.load_state_dict(checkpoint, strict=True)
         self.G.eval()
 
@@ -249,6 +250,8 @@ class GhostV2Module(L.LightningModule):
             Yt_image = paste_face_back_insightface(Xt_image, Xt_face, Yt_face_enhanced, Xt_affine_matrix)
         elif self.paste_back_mode == "ghost":
             Yt_image = paste_face_back_ghost(Xt_image, Xs_face, Yt_face_enhanced, Xs_face_landmarks_68, Xt_face_landmarks_68, Xt_affine_matrix)
+        elif self.paste_back_mode == "basic":
+            Yt_image = paste_face_back_basic(Xt_image, Yt_face_enhanced, Xt_affine_matrix)
         else:
             Yt_image = Yt_face_enhanced
 
