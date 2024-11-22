@@ -216,8 +216,19 @@ class GhostV2Module(L.LightningModule):
         if self.debug:
             os.makedirs(os.path.dirname(self.debug_source_face_path), exist_ok=True)
             os.makedirs(os.path.dirname(self.debug_target_face_path), exist_ok=True)
-            cv2.imwrite(self.debug_source_face_path, Xs_face)
-            cv2.imwrite(self.debug_target_face_path, Xt_face)
+
+            Xs_face_debug = Xs_face.copy()
+            if Xs_face_landmarks_68 is not None:
+                for index, point in enumerate(Xs_face_landmarks_68):
+                    cv2.putText(Xs_face_debug, f"{index}", (int(point[0]), int(point[1])), cv2.FONT_HERSHEY_SIMPLEX, 0.25, (255, 0, 0))
+
+            Xt_face_debug = Xt_face.copy()
+            if Xt_face_landmarks_68 is not None:
+                for index, point in enumerate(Xt_face_landmarks_68):
+                    cv2.putText(Xt_face_debug, f"{index}", (int(point[0]), int(point[1])), cv2.FONT_HERSHEY_SIMPLEX, 0.25, (255, 0, 0))
+
+            cv2.imwrite(self.debug_source_face_path, Xs_face_debug)
+            cv2.imwrite(self.debug_target_face_path, Xt_face_debug)
 
         Xs_face_tensor = convert_to_batch_tensor(Xs_face, self.device)
         Xt_face_tensor = convert_to_batch_tensor(Xt_face, self.device)
