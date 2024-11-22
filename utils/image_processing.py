@@ -370,17 +370,17 @@ def sort_faces_by_coordinates(faces: List[Dict[str, np.ndarray]]):
 @torch.no_grad()
 def paste_face_back_facexlib(
     face_parser: BiSeNet,
-    original_image: cv2.typing.MatLike,
+    target_image: cv2.typing.MatLike,
     restored_face: cv2.typing.MatLike,
     affine_matrix: np.ndarray,
     use_parser: bool,
     device: torch.device,
 ):
-    original_size = (original_image.shape[1], original_image.shape[0])
+    target_image_size = (target_image.shape[1], target_image.shape[0])
     face_size = (restored_face.shape[1], restored_face.shape[0])
 
     inverse_affine = cv2.invertAffineTransform(affine_matrix)
-    inv_restored = cv2.warpAffine(restored_face, inverse_affine, original_size)
+    inv_restored = cv2.warpAffine(restored_face, inverse_affine, target_image_size)
 
     if use_parser:
         face_input = cv2.resize(restored_face, (512, 512))
@@ -406,11 +406,11 @@ def paste_face_back_facexlib(
         mask = mask / 255.
 
         mask = cv2.resize(mask, restored_face.shape[:2])
-        mask = cv2.warpAffine(mask, inverse_affine, original_size, flags=3)
+        mask = cv2.warpAffine(mask, inverse_affine, target_image_size, flags=3)
         inv_soft_mask = mask[:, :, None]
     else:
         mask = np.ones(face_size, dtype=np.float32)
-        inv_mask = cv2.warpAffine(mask, inverse_affine, original_size)
+        inv_mask = cv2.warpAffine(mask, inverse_affine, target_image_size)
         # remove the black borders
         inv_mask_erosion = cv2.erode(
             inv_mask, np.ones((2, 2), np.uint8))
@@ -422,32 +422,31 @@ def paste_face_back_facexlib(
         inv_mask_center = cv2.erode(inv_mask_erosion, np.ones((erosion_radius, erosion_radius), np.uint8))
         blur_size = w_edge * 2
         inv_soft_mask = cv2.GaussianBlur(inv_mask_center, (blur_size + 1, blur_size + 1), 0)
-        if len(original_image.shape) == 2:  # original_image is gray image
-            original_image = original_image[:, :, None]
+        if len(target_image.shape) == 2:  # original_image is gray image
+            target_image = target_image[:, :, None]
         inv_soft_mask = inv_soft_mask[:, :, None]
 
-    if len(original_image.shape) == 3 and original_image.shape[2] == 4:  # alpha channel
-        alpha = original_image[:, :, 3:]
-        original_image = inv_soft_mask * inv_restored + (1 - inv_soft_mask) * original_image[:, :, 0:3]
-        original_image = np.concatenate((original_image, alpha), axis=2)
+    if len(target_image.shape) == 3 and target_image.shape[2] == 4:  # alpha channel
+        alpha = target_image[:, :, 3:]
+        target_image = inv_soft_mask * inv_restored + (1 - inv_soft_mask) * target_image[:, :, 0:3]
+        target_image = np.concatenate((target_image, alpha), axis=2)
     else:
-        original_image = inv_soft_mask * inv_restored + (1 - inv_soft_mask) * original_image
+        target_image = inv_soft_mask * inv_restored + (1 - inv_soft_mask) * target_image
 
-    if np.max(original_image) > 256:  # 16-bit image
-        original_image = original_image.astype(np.uint16)
+    if np.max(target_image) > 256:  # 16-bit image
+        target_image = target_image.astype(np.uint16)
     else:
-        original_image = original_image.astype(np.uint8)
+        target_image = target_image.astype(np.uint8)
     
-    return original_image
+    return target_image
 
 
 def paste_face_back_insightface(
-    original_image: cv2.typing.MatLike,
+    target_image: cv2.typing.MatLike,
     target_face: cv2.typing.MatLike,
     restored_face: cv2.typing.MatLike,
     affine_matrix: np.ndarray,
 ):
-    target_img = original_image
     fake_diff = restored_face.astype(np.float32) - target_face.astype(np.float32)
     fake_diff = np.abs(fake_diff).mean(axis=2)
     fake_diff[:2,:] = 0
@@ -456,9 +455,9 @@ def paste_face_back_insightface(
     fake_diff[:,-2:] = 0
     IM = cv2.invertAffineTransform(affine_matrix)
     img_white = np.full((target_face.shape[0],target_face.shape[1]), 255, dtype=np.float32)
-    restored_face = cv2.warpAffine(restored_face, IM, (target_img.shape[1], target_img.shape[0]), borderValue=0.0)
-    img_white = cv2.warpAffine(img_white, IM, (target_img.shape[1], target_img.shape[0]), borderValue=0.0)
-    fake_diff = cv2.warpAffine(fake_diff, IM, (target_img.shape[1], target_img.shape[0]), borderValue=0.0)
+    restored_face = cv2.warpAffine(restored_face, IM, (target_image.shape[1], target_image.shape[0]), borderValue=0.0)
+    img_white = cv2.warpAffine(img_white, IM, (target_image.shape[1], target_image.shape[0]), borderValue=0.0)
+    fake_diff = cv2.warpAffine(fake_diff, IM, (target_image.shape[1], target_image.shape[0]), borderValue=0.0)
     img_white[img_white>20] = 255
     fthresh = 10
     fake_diff[fake_diff<fthresh] = 0
@@ -469,15 +468,11 @@ def paste_face_back_insightface(
     mask_w = np.max(mask_w_inds) - np.min(mask_w_inds)
     mask_size = int(np.sqrt(mask_h*mask_w))
     k = max(mask_size//10, 10)
-    #k = max(mask_size//20, 6)
-    #k = 6
     kernel = np.ones((k,k),np.uint8)
     img_mask = cv2.erode(img_mask,kernel,iterations = 1)
     kernel = np.ones((2,2),np.uint8)
     fake_diff = cv2.dilate(fake_diff,kernel,iterations = 1)
     k = max(mask_size//20, 5)
-    #k = 3
-    #k = 3
     kernel_size = (k, k)
     blur_size = tuple(2*i+1 for i in kernel_size)
     img_mask = cv2.GaussianBlur(img_mask, blur_size, 0)
@@ -487,41 +482,40 @@ def paste_face_back_insightface(
     fake_diff = cv2.GaussianBlur(fake_diff, blur_size, 0)
     img_mask /= 255
     fake_diff /= 255
-    #img_mask = fake_diff
     img_mask = np.reshape(img_mask, [img_mask.shape[0],img_mask.shape[1],1])
-    fake_merged = img_mask * restored_face + (1-img_mask) * target_img.astype(np.float32)
+    fake_merged = img_mask * restored_face + (1-img_mask) * target_image.astype(np.float32)
     fake_merged = fake_merged.astype(np.uint8)
     return fake_merged
 
 
 def paste_face_back_ghost(
-    original_image: cv2.typing.MatLike,
+    target_image: cv2.typing.MatLike,
     source_face: cv2.typing.MatLike,
     restored_face: cv2.typing.MatLike,
     source_face_landmarks_68: cv2.typing.MatLike,
     target_face_landmarks_68: cv2.typing.MatLike,
     affine_matrix: np.ndarray,
 ):
-    original_size = (original_image.shape[1], original_image.shape[0])
+    target_image_size = (target_image.shape[1], target_image.shape[0])
     mask, _ = face_mask_static(source_face[:, :, ::-1], source_face_landmarks_68, target_face_landmarks_68)
     mat_rev = cv2.invertAffineTransform(affine_matrix)
-    swap_t = cv2.warpAffine(restored_face, mat_rev, original_size, borderMode=cv2.BORDER_REPLICATE)
-    mask_t = cv2.warpAffine(mask, mat_rev, original_size)
+    swap_t = cv2.warpAffine(restored_face, mat_rev, target_image_size, borderMode=cv2.BORDER_REPLICATE)
+    mask_t = cv2.warpAffine(mask, mat_rev, target_image_size)
     mask_t = np.expand_dims(mask_t, 2)
-    final = mask_t * swap_t + (1 - mask_t) * original_image
+    final = mask_t * swap_t + (1 - mask_t) * target_image
     final = np.array(final, dtype='uint8')
     return final
 
 
 @torch.no_grad()
 def paste_face_back_basic(
-    original_image: cv2.typing.MatLike,
+    target_image: cv2.typing.MatLike,
     restored_face: cv2.typing.MatLike,
     affine_matrix: np.ndarray,
 ):
-    original_size = (original_image.shape[1], original_image.shape[0])
+    target_image_size = (target_image.shape[1], target_image.shape[0])
     inverse_affine = cv2.invertAffineTransform(affine_matrix)
-    inv_restored = cv2.warpAffine(restored_face, inverse_affine, original_size)
+    inv_restored = cv2.warpAffine(restored_face, inverse_affine, target_image_size)
     return inv_restored
 
 
