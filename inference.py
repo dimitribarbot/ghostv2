@@ -81,6 +81,7 @@ class GhostV2Module(L.LightningModule):
         self.paste_back_mode = args.paste_back_mode
 
         self.debug = args.debug
+        self.debug_ghost_landmarks = args.debug_ghost_landmarks
         self.debug_source_face_path = args.debug_source_face_path
         self.debug_target_face_path = args.debug_target_face_path
         self.debug_swapped_face_path = args.debug_swapped_face_path
@@ -193,12 +194,12 @@ class GhostV2Module(L.LightningModule):
             os.makedirs(os.path.dirname(self.debug_target_face_path), exist_ok=True)
 
             Xs_face_debug = Xs_face.copy()
-            if Xs_face_landmarks_68 is not None:
+            if self.debug_ghost_landmarks and Xs_face_landmarks_68 is not None:
                 for index, point in enumerate(Xs_face_landmarks_68):
                     cv2.putText(Xs_face_debug, f"{index}", (int(point[0]), int(point[1])), cv2.FONT_HERSHEY_SIMPLEX, 0.25, (255, 0, 0))
 
             Xt_face_debug = Xt_face.copy()
-            if Xt_face_landmarks_68 is not None:
+            if self.debug_ghost_landmarks and Xt_face_landmarks_68 is not None:
                 for index, point in enumerate(Xt_face_landmarks_68):
                     cv2.putText(Xt_face_debug, f"{index}", (int(point[0]), int(point[1])), cv2.FONT_HERSHEY_SIMPLEX, 0.25, (255, 0, 0))
 

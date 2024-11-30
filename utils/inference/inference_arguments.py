@@ -55,6 +55,7 @@ class InferenceArguments(EmbeddingModelsArguments):
 
     """ Debug arguments """
     debug: bool = flag(default=False, negative_prefix="--no-")
+    debug_ghost_landmarks: bool = flag(default=False, negative_prefix="--no-")
     debug_source_face_path: str = make_real_path("./examples/results/inference/source_face.jpg")
     debug_target_face_path: str = make_real_path("./examples/results/inference/target_face.jpg")
     debug_swapped_face_path: str = make_real_path("./examples/results/inference/swapped_face.jpg")
