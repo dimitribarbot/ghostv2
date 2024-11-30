@@ -1,3 +1,5 @@
+# Heavily modified from https://github.com/ai-forever/ghost/blob/main/train.py
+
 print("started imports")
 
 import time
@@ -10,7 +12,6 @@ from simple_parsing import ArgumentParser
 
 from torch.utils.data import DataLoader
 import torch.optim as optim
-import torch.nn.functional as F
 import torch
 import torch.optim.lr_scheduler as scheduler
 from safetensors.torch import load_file, save_file
@@ -19,14 +20,14 @@ from lightning.pytorch import loggers as pl_loggers
 from lightning.pytorch.core.optimizer import LightningOptimizer
 from lightning.pytorch.callbacks import ModelCheckpoint
 
-from network.AEI_Net import *
-from network.MultiscaleDiscriminator import *
 from AdaptiveWingLoss.core import models
-from utils.training.training_arguments import TrainingArguments
-from utils.training.Dataset import FaceEmbedLaion, FaceEmbed
-from utils.image_processing import get_face_embeddings, make_image_list, get_faceswap
-from utils.training.losses import compute_discriminator_loss, compute_generator_losses
+from Ghost.AEI_Net import *
+from Ghost.MultiscaleDiscriminator import *
+from utils.image_processing import get_face_embeddings, initialize_embedding_model, make_image_list, get_faceswap
+from utils.training.dataset import FaceEmbedLaion, FaceEmbed
 from utils.training.detector import detect_landmarks, paint_eyes
+from utils.training.losses import compute_discriminator_loss, compute_generator_losses
+from utils.training.training_arguments import TrainingArguments
 
 print("finished imports")
 
@@ -102,36 +103,7 @@ class GhostV2Module(L.LightningModule):
             except FileNotFoundError:
                 print("Not found pretrained weights. Continue without any pretrained weights.")
 
-        if self.args.face_embeddings == "arcface":
-            print("Initializing ArcFace model")
-            from ArcFace.iresnet import iresnet100
-            self.embedding_model = iresnet100()
-            self.embedding_model.load_state_dict(load_file(self.args.arcface_model_path))
-            self.embedding_model.eval()
-        elif args.face_embeddings == "adaface":
-            print("Initializing AdaFace model")
-            from AdaFace.net import build_model
-            self.embedding_model = build_model("ir_101")
-            self.embedding_model.load_state_dict(load_file(self.args.adaface_model_path))
-            self.embedding_model.eval()
-        elif self.args.face_embeddings == "cvl_arcface":
-            print("Initializing CVL ArcFace model")
-            from CVLFace import get_arcface_model
-            self.embedding_model = get_arcface_model(self.args.cvl_arcface_model_path)
-        elif args.face_embeddings == "cvl_adaface":
-            print("Initializing CVL AdaFace model")
-            from CVLFace import get_adaface_model
-            self.embedding_model = get_adaface_model(self.args.cvl_adaface_model_path)
-        elif args.face_embeddings == "cvl_vit":
-            print("Initializing CVL ViT model")
-            from CVLFace import get_vit_model
-            self.embedding_model = get_vit_model(self.args.cvl_vit_model_path)
-        else:
-            print("Initializing Facenet model")
-            from facenet.inception_resnet_v1 import InceptionResnetV1
-            self.embedding_model = InceptionResnetV1()
-            self.embedding_model.load_state_dict(load_file(self.args.facenet_model_path))
-            self.embedding_model.eval()
+        self.embedding_model = initialize_embedding_model(args.face_embeddings, args)
 
         if self.args.eye_detector_loss:
             self.model_ft = models.FAN(4, False, False, 98)

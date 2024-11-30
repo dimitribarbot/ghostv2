@@ -12,7 +12,7 @@ from GFPGAN.gfpganv1_clean_arch import GFPGANv1Clean
 from LivePortrait.pipeline import LivePortraitPipeline, RetargetingParameters
 from LivePortrait.utils.io import contiguous, resize_to_limit
 from RetinaFace.detector import RetinaFace
-from face_alignment import FaceAlignment
+from FaceAlignment import FaceAlignment
 from utils.preprocessing.preprocess_arguments import PreprocessArguments
 from utils.image_processing import get_aligned_face_and_affine_matrix, enhance_faces_in_original_image, \
     enhance_face, sort_faces_by_coordinates, random_horizontal_flip, trans_points2d
@@ -168,6 +168,7 @@ def get_faces_from_landmarks(
     do_crop: bool,
     image_name: str,
     device: str,
+    should_enhance_face: bool,
 ):
     faces = []
     for landmark_68_index, landmark_68 in enumerate(landmarks_68):
@@ -179,7 +180,8 @@ def get_faces_from_landmarks(
         else:
             landmark_5 = landmarks_5[landmark_68_index]
             cropped_face, affine_matrix = get_aligned_face_and_affine_matrix(bgr_image, landmark_5)
-            cropped_face = enhance_face(gfpgan, cropped_face, image_name, device)
+            if should_enhance_face:
+                cropped_face = enhance_face(gfpgan, cropped_face, image_name, device)
             cropped_face_landmark = trans_points2d(landmark_68, affine_matrix)
             face = {
                 "kps": cropped_face_landmark,
@@ -237,7 +239,7 @@ def preprocess(
     bboxes = [detected_face["box"] for detected_face in detected_faces]
     kpss = [detected_face["kps"] for detected_face in detected_faces]
 
-    if args.enhance_before_retargeting:
+    if args.enhance_faces_in_original_image:
         rgb_image = enhance_faces_in_original_image(gfpgan, face_parser, rgb_image, kpss, id, device)
 
     bgr_image = cv2.cvtColor(rgb_image, cv2.COLOR_RGB2BGR)
@@ -261,7 +263,7 @@ def preprocess(
                 aligner,
                 device,
                 args.save_full_size,
-                should_enhance_face=True
+                should_enhance_face=args.enhance_output_face
             )
         return
 
@@ -273,7 +275,16 @@ def preprocess(
     if landmarks is None or len(landmarks) == 0:
         return
 
-    faces = get_faces_from_landmarks(gfpgan, bgr_image, landmarks, kpss, args.retargeting_do_crop, id, device)
+    faces = get_faces_from_landmarks(
+        gfpgan,
+        bgr_image,
+        landmarks,
+        kpss,
+        args.retargeting_do_crop,
+        id,
+        device,
+        args.enhance_output_face
+    )
 
     retargeted_images = get_retargeted_images(
         live_portrait_pipeline,
@@ -325,7 +336,7 @@ def preprocess(
                     aligner,
                     device,
                     args.save_full_size,
-                    should_enhance_face=True
+                    should_enhance_face=args.enhance_output_face
                 )
     else:
         for retargeted_face_index in range(len(retargeted_images)):

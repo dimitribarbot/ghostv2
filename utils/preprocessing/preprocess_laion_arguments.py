@@ -13,8 +13,8 @@ def make_real_path(relative_path):
 class PreprocessLaionArguments(PreprocessArguments):
 
     """ Data arguments """
-    laion_face_base_dir: str = "/home/dimitribarbot/datasets/LAION-Face"
+    laion_face_base_dir: str = make_real_path("./datasets/LAION-Face")
     laion_face_part_indices: List[int] = list_field(default=[0])
-    output_dir: str = "/home/dimitribarbot/datasets/LAION-Face/laion_face_cropped_512x512_unaligned"
-    output_dir_resized: str = "/home/dimitribarbot/datasets/LAION-Face/laion_face_cropped_256x256"
-    output_dir_retargeted: str = "/home/dimitribarbot/datasets/LAION-Face/laion_face_retargeted_data"
+    output_dir: str = make_real_path("./datasets/LAION-Face/laion_face_cropped_512x512_unaligned")
+    output_dir_resized: str = make_real_path("./datasets/LAION-Face/laion_face_cropped_256x256")
+    output_dir_retargeted: str = make_real_path("./datasets/LAION-Face/laion_face_retargeted_data")

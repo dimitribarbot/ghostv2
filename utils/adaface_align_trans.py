@@ -1,3 +1,5 @@
+# Code modified from https://github.com/mk-minchul/AdaFace/blob/master/face_alignment/mtcnn_pytorch/src/
+
 # -*- coding: utf-8 -*-
 """
 Created on Mon Apr 24 15:43:29 2017

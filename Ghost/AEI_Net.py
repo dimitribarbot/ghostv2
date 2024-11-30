@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from .AADLayer import *
-from network.resnet import MLAttrEncoderResnet
+from Ghost.resnet import MLAttrEncoderResnet
 
 
 def weight_init(m):

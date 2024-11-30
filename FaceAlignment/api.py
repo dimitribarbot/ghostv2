@@ -76,7 +76,7 @@ class FaceAlignment:
 
         # Get the face detector
         package_directory_name = os.path.basename(root_dir)
-        face_detector_module = importlib.import_module('face_alignment.detection.' + face_detector, package=package_directory_name)
+        face_detector_module = importlib.import_module('FaceAlignment.detection.' + face_detector, package=package_directory_name)
 
 
         face_detector_kwargs = face_detector_kwargs or {}

@@ -15,7 +15,7 @@ from CVLFace.differentiable_face_aligner import DifferentiableFaceAligner
 from GFPGAN.gfpganv1_clean_arch import GFPGANv1Clean
 from LivePortrait.pipeline import LivePortraitPipeline
 from RetinaFace.detector import RetinaFace
-from face_alignment import FaceAlignment, LandmarksType
+from FaceAlignment import FaceAlignment, LandmarksType
 from utils.preprocessing.preprocess import preprocess
 from utils.preprocessing.preprocess_lagenda_arguments import PreprocessLagendaArguments
 
@@ -84,21 +84,23 @@ def main(args: PreprocessLagendaArguments):
     if device == "cpu":
         print("Nor Cuda nor MPS are available, using CPU. Check if it's ok.")
 
-    gfpgan = GFPGANv1Clean(
-        out_size=512,
-        num_style_feat=512,
-        channel_multiplier=2,
-        decoder_load_path=None,
-        fix_decoder=False,
-        num_mlp=8,
-        input_is_latent=True,
-        different_w=True,
-        narrow=1,
-        sft_half=True
-    )
-    gfpgan.load_state_dict(load_file(args.gfpgan_model_path), strict=True)
-    gfpgan.eval()
-    gfpgan = gfpgan.to(device)
+    gfpgan = None
+    if args.enhance_faces_in_original_image or args.enhance_output_face:
+        gfpgan = GFPGANv1Clean(
+            out_size=512,
+            num_style_feat=512,
+            channel_multiplier=2,
+            decoder_load_path=None,
+            fix_decoder=False,
+            num_mlp=8,
+            input_is_latent=True,
+            different_w=True,
+            narrow=1,
+            sft_half=True
+        )
+        gfpgan.load_state_dict(load_file(args.gfpgan_model_path), strict=True)
+        gfpgan.eval()
+        gfpgan = gfpgan.to(device)
 
     face_parser = BiSeNet(num_class=19)
     face_parser.load_state_dict(load_file(args.face_parser_model_path), strict=True)

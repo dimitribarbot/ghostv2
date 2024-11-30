@@ -1,3 +1,5 @@
+# Modified from https://github.com/ai-forever/ghost/blob/main/utils/training/losses.py
+
 import torch
 
 from utils.training.training_arguments import TrainingArguments

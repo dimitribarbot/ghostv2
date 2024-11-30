@@ -4,6 +4,7 @@ from typing import Any, Dict
 from torch.hub import download_url_to_file
 
 from ..core import FaceDetector
+from .alignment import load_net, batch_detect
 
 root_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 model_dir = os.path.join(root_dir, "weights", "FaceAlignment")
@@ -11,8 +12,6 @@ model_dir = os.path.join(root_dir, "weights", "FaceAlignment")
 models_urls = {
     'retinaface': 'https://github.com/dimitribarbot/sd-webui-live-portrait/releases/download/v0.2.4/Resnet50_Final.safetensors',
 }
-
-from face_alignment.detection.retinaface.alignment import load_net, batch_detect
 
 
 class RetinaFaceDetector(FaceDetector):

@@ -4,11 +4,14 @@ from dataclasses import dataclass
 
 from simple_parsing import choice, flag
 
+from utils.embedding_models_arguments import EmbeddingModelsArguments
+
+
 def make_real_path(relative_path):
     return os.path.join(os.path.dirname(os.path.realpath(__file__)), "../..", relative_path)
 
 @dataclass
-class EmbeddingDistanceArguments:
+class EmbeddingDistanceArguments(EmbeddingModelsArguments):
 
     """ Data arguments """
     source_image_path: Optional[str] = make_real_path("./examples/images/base/source1.jpg")
@@ -18,12 +21,6 @@ class EmbeddingDistanceArguments:
     cvlface_original_aligner_model_path: str = make_real_path("./weights/CVLFace/cvlface_DFA_mobilenet")  # First run "pip install timm huggingface_hub transformers" to use this
     cvlface_original_aligner_repository: str = "minchul/cvlface_DFA_mobilenet"  # First run "pip install timm huggingface_hub transformers" to use this
     cvlface_aligner_model_path: str = make_real_path("./weights/CVLFace/cvlface_DFA_mobilenet.safetensors")
-    arcface_model_path: str = make_real_path("./weights/ArcFace/backbone.safetensors")
-    adaface_model_path: str = make_real_path("./weights/AdaFace/adaface_ir101_webface12m.safetensors")
-    cvl_arcface_model_path: str = make_real_path("./weights/CVLFace/cvlface_arcface_ir101_webface4m.safetensors")
-    cvl_adaface_model_path: str = make_real_path("./weights/CVLFace/cvlface_adaface_ir101_webface12m.safetensors")
-    cvl_vit_model_path: str = make_real_path("./weights/CVLFace/cvlface_adaface_vit_base_webface4m.safetensors")
-    facenet_model_path: str = make_real_path("./weights/Facenet/facenet_pytorch.safetensors")
     source_face_embeddings: str = choice("facenet", "arcface", "adaface", "cvl_arcface", "cvl_adaface", "cvl_vit", default="cvl_vit")
     target_face_embeddings: str = choice("facenet", "arcface", "adaface", "cvl_arcface", "cvl_adaface", "cvl_vit", default="cvl_vit")
 

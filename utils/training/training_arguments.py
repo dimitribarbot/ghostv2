@@ -5,16 +5,19 @@ from typing import Optional
 from simple_parsing import choice
 from simple_parsing.helpers import flag
 
+from utils.embedding_models_arguments import EmbeddingModelsArguments
+
+
 def make_real_path(relative_path):
     return os.path.join(os.path.dirname(os.path.realpath(__file__)), "../..", relative_path)
 
 @dataclass
-class TrainingArguments:
+class TrainingArguments(EmbeddingModelsArguments):
     """ Info about this run """
     run_name: str                                                           # Name of this run. Used to create folders where to save the weights.
 
     """ Dataset params """
-    dataset_path: str = make_real_path("./LaionFace-crop/")                 # Path to the dataset. If not LAION dataset is used, param --laion should be set False
+    dataset_path: str = make_real_path("./datasets/LAION-Face/laion_face_cropped_256x256") # Path to the dataset. If not LAION dataset is used, param --laion should be set False
     ckpt_path: Optional[str] = None                                         # Path to checkpoint to resume training.
     example_images_path: str = make_real_path("./examples/images/training_insightface_v2") # Path to source1.png..source6.png and target1.png..target6.png training images.
     G_path: Optional[str] = None                                            # Path to pretrained weights for G. Only used if pretrained=True
@@ -29,12 +32,6 @@ class TrainingArguments:
     weight_eyes: float = 0                                                  # Eyes Loss weight
 
     """ Training params you may want to change """
-    arcface_model_path: str = make_real_path("./weights/ArcFace/backbone.safetensors")
-    adaface_model_path: str = make_real_path("./weights/AdaFace/adaface_ir101_webface12m.safetensors")
-    cvl_arcface_model_path: str = make_real_path("./weights/CVLFace/cvlface_arcface_ir101_webface4m.safetensors")
-    cvl_adaface_model_path: str = make_real_path("./weights/CVLFace/cvlface_adaface_ir101_webface12m.safetensors")
-    cvl_vit_model_path: str = make_real_path("./weights/CVLFace/cvlface_adaface_vit_base_webface4m.safetensors")
-    facenet_model_path: str = make_real_path("./weights/Facenet/facenet_pytorch.safetensors")
     adaptive_wing_loss_model_path: str = make_real_path("./weights/AdaptiveWingLoss/WFLW_4HG.safetensors")
     face_embeddings: str = choice("facenet", "arcface", "adaface", "cvl_arcface", "cvl_adaface", "cvl_vit", default="cvl_vit")  # Model used for face embeddings
     backbone: str = choice("unet", "linknet", "resnet", default="unet")     # Backbone for attribute encoder

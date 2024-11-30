@@ -1,3 +1,5 @@
+# Heavily modified from https://github.com/ai-forever/ghost/blob/main/inference.py
+
 print("started imports")
 
 import os
@@ -7,17 +9,20 @@ from simple_parsing import ArgumentParser
 
 import cv2
 import torch
-import numpy as np
 from torch.utils.data import DataLoader
 from safetensors.torch import load_file
 import lightning as L
 
-from face_alignment.api import FaceAlignment, LandmarksType
-from network.AEI_Net import *
-from utils.inference.inference_arguments import InferenceArguments
+from FaceAlignment.api import FaceAlignment, LandmarksType
+from Ghost.AEI_Net import *
+from CVLFace import get_aligner
+from BiSeNet.bisenet import BiSeNet
+from GFPGAN.gfpganv1_clean_arch import GFPGANv1Clean
+from RetinaFace.detector import RetinaFace
 from utils.image_processing import (
     get_face_embeddings,
     convert_to_batch_tensor,
+    initialize_embedding_model,
     paste_face_back_basic,
     paste_face_back_ghost,
     trans_points2d,
@@ -28,11 +33,8 @@ from utils.image_processing import (
     sort_faces_by_coordinates,
     get_aligned_face_and_affine_matrix
 )
-from utils.inference.Dataset import FaceEmbed
-from CVLFace import get_aligner
-from BiSeNet.bisenet import BiSeNet
-from GFPGAN.gfpganv1_clean_arch import GFPGANv1Clean
-from RetinaFace.detector import RetinaFace
+from utils.inference.dataset import FaceEmbed
+from utils.inference.inference_arguments import InferenceArguments
 
 print("finished imports")
 
@@ -91,36 +93,7 @@ class GhostV2Module(L.LightningModule):
         self.G.load_state_dict(checkpoint, strict=True)
         self.G.eval()
 
-        if args.face_embeddings == "arcface":
-            print("Initializing ArcFace model")
-            from ArcFace.iresnet import iresnet100
-            self.embedding_model = iresnet100()
-            self.embedding_model.load_state_dict(load_file(args.arcface_model_path))
-            self.embedding_model.eval()
-        elif args.face_embeddings == "adaface":
-            print("Initializing AdaFace model")
-            from AdaFace.net import build_model
-            self.embedding_model = build_model("ir_101")
-            self.embedding_model.load_state_dict(load_file(args.adaface_model_path))
-            self.embedding_model.eval()
-        elif args.face_embeddings == "cvl_arcface":
-            print("Initializing CVL ArcFace model")
-            from CVLFace import get_arcface_model
-            self.embedding_model = get_arcface_model(args.cvl_arcface_model_path)
-        elif args.face_embeddings == "cvl_adaface":
-            print("Initializing CVL AdaFace model")
-            from CVLFace import get_adaface_model
-            self.embedding_model = get_adaface_model(args.cvl_adaface_model_path)
-        elif args.face_embeddings == "cvl_vit":
-            print("Initializing CVL ViT model")
-            from CVLFace import get_vit_model
-            self.embedding_model = get_vit_model(args.cvl_vit_model_path)
-        else:
-            print("Initializing Facenet model")
-            from facenet.inception_resnet_v1 import InceptionResnetV1
-            self.embedding_model = InceptionResnetV1()
-            self.embedding_model.load_state_dict(load_file(args.facenet_model_path))
-            self.embedding_model.eval()
+        self.embedding_model = initialize_embedding_model(args.face_embeddings, args)
 
         self.gfpgan = GFPGANv1Clean(
             out_size=512,

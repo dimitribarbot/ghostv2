@@ -10,6 +10,7 @@ import torch.nn.functional as F
 import torchvision.transforms as transforms
 from torchvision.transforms.functional import normalize
 from torchvision.utils import make_grid
+from safetensors.torch import load_file
 
 import numpy as np
 from PIL import Image
@@ -19,6 +20,7 @@ from BiSeNet.bisenet import BiSeNet
 from CVLFace.differentiable_face_aligner import DifferentiableFaceAligner
 from GFPGAN.gfpganv1_clean_arch import GFPGANv1Clean
 from utils.adaface_align_trans import get_reference_facial_points, warp_and_crop_face
+from utils.embedding_models_arguments import EmbeddingModelsArguments
 from utils.masks import face_mask_static
 
 
@@ -66,6 +68,7 @@ default_template_src = np.array([src1, src2, src3, src4, src5])
 adaface_reference = None
 
 
+# Modified from https://github.com/ai-forever/ghost/blob/main/utils/training/image_processing.py
 def torch2image(torch_image: torch.tensor) -> np.ndarray:
     batch = False
     
@@ -93,6 +96,30 @@ def torch2image(torch_image: torch.tensor) -> np.ndarray:
         return np_image
 
 
+# Modified from https://github.com/ai-forever/ghost/blob/main/utils/training/image_processing.py
+def make_image_list(images) -> np.ndarray:    
+    np_images = []
+    
+    for torch_image in images:
+        np_img = torch2image(torch_image)
+        np_images.append(np_img)
+    
+    return np.concatenate(np_images, axis=0)
+
+
+# Modified from https://github.com/ai-forever/ghost/blob/main/utils/training/image_processing.py
+def read_torch_image(path: str) -> torch.tensor:
+    
+    image = cv2.imread(path)
+    image = cv2.resize(image, (256, 256))
+    image = Image.fromarray(image[:, :, ::-1])
+    image = transformer_embeddings(image)
+    image = image.view(-1, image.shape[0], image.shape[1], image.shape[2])
+    
+    return image
+
+
+# Modified from https://github.com/XPixelGroup/BasicSR/blob/master/basicsr/utils/img_util.py
 def img2tensor(imgs, bgr2rgb=True, float32=True):
     def _totensor(img, bgr2rgb, float32):
         if img.shape[2] == 3 and bgr2rgb:
@@ -110,6 +137,7 @@ def img2tensor(imgs, bgr2rgb=True, float32=True):
         return _totensor(imgs, bgr2rgb, float32)
     
 
+# Modified from https://github.com/XPixelGroup/BasicSR/blob/master/basicsr/utils/img_util.py
 def tensor2img(tensor, rgb2bgr=True, out_type=np.uint8, min_max=(0, 1)):
     if not (torch.is_tensor(tensor) or (isinstance(tensor, list) and all(torch.is_tensor(t) for t in tensor))):
         raise TypeError(f'tensor or list of tensors expected, got {type(tensor)}')
@@ -149,31 +177,49 @@ def tensor2img(tensor, rgb2bgr=True, out_type=np.uint8, min_max=(0, 1)):
     return result
 
 
-def make_image_list(images) -> np.ndarray:    
-    np_images = []
-    
-    for torch_image in images:
-        np_img = torch2image(torch_image)
-        np_images.append(np_img)
-    
-    return np.concatenate(np_images, axis=0)
-
-
-def read_torch_image(path: str) -> torch.tensor:
-    
-    image = cv2.imread(path)
-    image = cv2.resize(image, (256, 256))
-    image = Image.fromarray(image[:, :, ::-1])
-    image = transformer_embeddings(image)
-    image = image.view(-1, image.shape[0], image.shape[1], image.shape[2])
-    
-    return image
-
-
+# Modified from https://github.com/TencentARC/GFPGAN/blob/master/gfpgan/utils.py
 def convert_to_batch_tensor(bgr_image: cv2.typing.MatLike, device: torch.device):
     input = img2tensor(bgr_image / 255., bgr2rgb=True, float32=True)
     normalize(input, (0.5, 0.5, 0.5), (0.5, 0.5, 0.5), inplace=True)
     return input.unsqueeze(0).to(device)
+
+
+def initialize_embedding_model(face_embeddings: str, args: EmbeddingModelsArguments, device: str = None):
+    if face_embeddings == "arcface":
+        print("Initializing ArcFace model")
+        from ArcFace.iresnet import iresnet100
+        embedding_model = iresnet100()
+        embedding_model.load_state_dict(load_file(args.arcface_model_path))
+        embedding_model.eval()
+    elif face_embeddings == "adaface":
+        print("Initializing AdaFace model")
+        from AdaFace.net import build_model
+        embedding_model = build_model("ir_101")
+        embedding_model.load_state_dict(load_file(args.adaface_model_path))
+        embedding_model.eval()
+    elif face_embeddings == "cvl_arcface":
+        print("Initializing CVL ArcFace model")
+        from CVLFace import get_arcface_model
+        embedding_model = get_arcface_model(args.cvl_arcface_model_path)
+    elif face_embeddings == "cvl_adaface":
+        print("Initializing CVL AdaFace model")
+        from CVLFace import get_adaface_model
+        embedding_model = get_adaface_model(args.cvl_adaface_model_path)
+    elif face_embeddings == "cvl_vit":
+        print("Initializing CVL ViT model")
+        from CVLFace import get_vit_model
+        embedding_model = get_vit_model(args.cvl_vit_model_path)
+    else:
+        print("Initializing Facenet model")
+        from Facenet.inception_resnet_v1 import InceptionResnetV1
+        embedding_model = InceptionResnetV1()
+        embedding_model.load_state_dict(load_file(args.facenet_model_path))
+        embedding_model.eval()
+
+    if device is not None:
+        embedding_model = embedding_model.to(device)
+    
+    return embedding_model
 
 
 def get_face_embeddings(source: torch.Tensor, model: Any, face_embeddings: str):
@@ -184,6 +230,7 @@ def get_face_embeddings(source: torch.Tensor, model: Any, face_embeddings: str):
     return embeddings
 
 
+# Modified from https://github.com/ai-forever/ghost/blob/main/utils/training/image_processing.py
 def get_faceswap(source_path: str,
                  target_path: str,
                  G: Any,
@@ -265,6 +312,7 @@ def norm_crop_v2(bgr_image: cv2.typing.MatLike, landmark, face_size=224):
     return warped, M
 
 
+# Modified from https://github.com/xinntao/facexlib/blob/master/facexlib/utils/face_restoration_helper.py
 def align_warp_face(bgr_image: cv2.typing.MatLike, landmarks: np.ndarray, face_size=512):
     """Align and warp faces with face template.
     """
@@ -278,6 +326,7 @@ def align_warp_face(bgr_image: cv2.typing.MatLike, landmarks: np.ndarray, face_s
     return cropped_face, affine_matrix
 
 
+# Modified from https://github.com/mk-minchul/AdaFace/blob/master/face_alignment/mtcnn.py
 def get_aligned_face(bgr_image: cv2.typing.MatLike, landmarks: np.ndarray, face_size=512):
     global adaface_reference
     if adaface_reference is None:
@@ -367,6 +416,7 @@ def sort_faces_by_coordinates(faces: List[Dict[str, np.ndarray]]):
     faces.sort(key=functools.cmp_to_key(get_face_sort_key))
 
 
+# Modified from https://github.com/xinntao/facexlib/blob/master/facexlib/utils/face_restoration_helper.py
 @torch.no_grad()
 def paste_face_back_facexlib(
     face_parser: BiSeNet,
@@ -441,6 +491,7 @@ def paste_face_back_facexlib(
     return target_image
 
 
+# Modified from https://github.com/deepinsight/insightface/blob/master/python-package/insightface/model_zoo/inswapper.py
 def paste_face_back_insightface(
     target_image: cv2.typing.MatLike,
     target_face: cv2.typing.MatLike,
@@ -488,6 +539,7 @@ def paste_face_back_insightface(
     return fake_merged
 
 
+# Modified from https://github.com/ai-forever/ghost/blob/main/utils/inference/image_processing.py
 def paste_face_back_ghost(
     target_image: cv2.typing.MatLike,
     source_face: cv2.typing.MatLike,
@@ -519,6 +571,7 @@ def paste_face_back_basic(
     return inv_restored
 
 
+# Modified from https://github.com/TencentARC/GFPGAN/blob/master/gfpgan/utils.py
 @torch.no_grad()
 def enhance_face(
     gfpgan: GFPGANv1Clean,
@@ -541,6 +594,7 @@ def enhance_face(
     return restored_face
 
 
+# Modified from https://github.com/TencentARC/GFPGAN/blob/master/gfpgan/utils.py
 @torch.no_grad()
 def enhance_faces_in_original_image(
     gfpgan: GFPGANv1Clean,

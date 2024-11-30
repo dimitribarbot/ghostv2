@@ -1,3 +1,5 @@
+# Heavily modified from https://github.com/ai-forever/ghost/blob/main/utils/training/Dataset.py
+
 import glob
 import random
 from itertools import groupby

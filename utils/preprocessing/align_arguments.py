@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from simple_parsing import choice
 from simple_parsing.helpers import flag
 
+
 def make_real_path(relative_path):
     return os.path.join(os.path.dirname(os.path.realpath(__file__)), "../..", relative_path)
 
@@ -13,7 +14,7 @@ class AlignArguments:
 
     """ Data arguments """
     source_image: Optional[str] = None
-    source_folder: Optional[str] = None
+    source_folder: Optional[str] = make_real_path("./examples/images/base")
     aligned_folder: str = make_real_path("./examples/images/training_facexlib")
     output_extension: str = choice(".png", ".jpg", "same_as_source", default="same_as_source")
 

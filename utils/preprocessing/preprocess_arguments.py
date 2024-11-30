@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from simple_parsing import choice
 from simple_parsing.helpers import flag
 
+
 def make_real_path(relative_path):
     return os.path.join(os.path.dirname(os.path.realpath(__file__)), "../..", relative_path)
 
@@ -33,7 +34,8 @@ class PreprocessArguments:
     """ Retargeting options """
     retargeting: bool = flag(default=True, negative_prefix="--no-")
     number_of_variants_per_face: int = 9
-    enhance_before_retargeting: bool = flag(default=False, negative_prefix="--no-")
+    enhance_output_face: bool = flag(default=True, negative_prefix="--no-")
+    enhance_faces_in_original_image: bool = flag(default=False, negative_prefix="--no-")
     retargeting_do_crop: bool = flag(default=False, negative_prefix="--no-")
     retargeting_crop_scale: float = 2.3
     filter_valid_faces: bool = flag(default=True, negative_prefix="--no-")

@@ -1,3 +1,5 @@
+# Modified from https://github.com/ai-forever/ghost/blob/main/utils/inference/masks.py
+
 import numpy as np
 import cv2
 

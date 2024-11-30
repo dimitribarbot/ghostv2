@@ -1,3 +1,5 @@
+# Modified from https://github.com/ai-forever/ghost/blob/main/utils/training/detector.py
+
 import torch
 import cv2
 from PIL import Image
