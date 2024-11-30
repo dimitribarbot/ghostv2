@@ -198,6 +198,8 @@ class GhostV2Module(L.LightningModule):
         Xt_face, Xt_affine_matrix = get_aligned_face_and_affine_matrix(
             Xt_image, Xt_face_kps, face_size=256, align_mode=self.align_mode, aligner=self.aligner, device=self.device)
 
+        Xs_face_landmarks_68 = None
+        Xt_face_landmarks_68 = None
         if self.paste_back_mode == "ghost":
             Xs_face_box = Xs_detected_faces[self.source_face_index]["box"]
             Xt_face_box = Xt_detected_faces[self.target_face_index]["box"]

@@ -18,7 +18,8 @@ from utils.preprocessing.embedding_distance_arguments import EmbeddingDistanceAr
 
 @torch.no_grad()
 def process(
-    embedding_model: Any,
+    source_embedding_model: Any,
+    target_embedding_model: Any,
     face_detector: RetinaFace,
     original_aligner: Optional[DifferentiableFaceAligner],
     aligner: Optional[DifferentiableFaceAligner],
@@ -57,12 +58,49 @@ def process(
     source_image_face = convert_to_batch_tensor(source_cropped_face, device)
     target_image_face = convert_to_batch_tensor(target_cropped_face, device)
 
-    source_embeddings = get_face_embeddings(source_image_face, embedding_model, args.face_embeddings)
-    target_embeddings = get_face_embeddings(target_image_face, embedding_model, args.face_embeddings)
+    source_embeddings = get_face_embeddings(source_image_face, source_embedding_model, args.source_face_embeddings)
+    target_embeddings = get_face_embeddings(target_image_face, target_embedding_model, args.target_face_embeddings)
 
     distance = 1 - F.cosine_similarity(source_embeddings, target_embeddings).item()
 
     print(f"Distance between embeddings is: {distance}")
+
+
+def initialize_embedding_model(face_embeddings: str, args: EmbeddingDistanceArguments, device: str):
+    if face_embeddings == "arcface":
+        print("Initializing ArcFace model")
+        from ArcFace.iresnet import iresnet100
+        embedding_model = iresnet100()
+        embedding_model.load_state_dict(load_file(args.arcface_model_path))
+        embedding_model.eval()
+    elif face_embeddings == "adaface":
+        print("Initializing AdaFace model")
+        from AdaFace.net import build_model
+        embedding_model = build_model("ir_101")
+        embedding_model.load_state_dict(load_file(args.adaface_model_path))
+        embedding_model.eval()
+    elif face_embeddings == "cvl_arcface":
+        print("Initializing CVL ArcFace model")
+        from CVLFace import get_arcface_model
+        embedding_model = get_arcface_model(args.cvl_arcface_model_path)
+    elif face_embeddings == "cvl_adaface":
+        print("Initializing CVL AdaFace model")
+        from CVLFace import get_adaface_model
+        embedding_model = get_adaface_model(args.cvl_adaface_model_path)
+    elif face_embeddings == "cvl_vit":
+        print("Initializing CVL ViT model")
+        from CVLFace import get_vit_model
+        embedding_model = get_vit_model(args.cvl_vit_model_path)
+    else:
+        print("Initializing Facenet model")
+        from facenet.inception_resnet_v1 import InceptionResnetV1
+        embedding_model = InceptionResnetV1()
+        embedding_model.load_state_dict(load_file(args.facenet_model_path))
+        embedding_model.eval()
+
+    embedding_model = embedding_model.to(device)
+    
+    return embedding_model
 
 
 def main(args: EmbeddingDistanceArguments):
@@ -97,41 +135,15 @@ def main(args: EmbeddingDistanceArguments):
     if args.source_align_mode == "cvlface" or args.target_align_mode == "cvlface":
         aligner = get_aligner(args.cvlface_aligner_model_path, device)
 
-    if args.face_embeddings == "arcface":
-        print("Initializing ArcFace model")
-        from ArcFace.iresnet import iresnet100
-        embedding_model = iresnet100()
-        embedding_model.load_state_dict(load_file(args.arcface_model_path))
-        embedding_model.eval()
-    elif args.face_embeddings == "adaface":
-        print("Initializing AdaFace model")
-        from AdaFace.net import build_model
-        embedding_model = build_model("ir_101")
-        embedding_model.load_state_dict(load_file(args.adaface_model_path))
-        embedding_model.eval()
-    elif args.face_embeddings == "cvl_arcface":
-        print("Initializing CVL ArcFace model")
-        from CVLFace import get_arcface_model
-        embedding_model = get_arcface_model(args.cvl_arcface_model_path)
-    elif args.face_embeddings == "cvl_adaface":
-        print("Initializing CVL AdaFace model")
-        from CVLFace import get_adaface_model
-        embedding_model = get_adaface_model(args.cvl_adaface_model_path)
-    elif args.face_embeddings == "cvl_vit":
-        print("Initializing CVL ViT model")
-        from CVLFace import get_vit_model
-        embedding_model = get_vit_model(args.cvl_vit_model_path)
+    source_embedding_model = initialize_embedding_model(args.source_face_embeddings, args, device)
+    if args.target_face_embeddings != args.source_face_embeddings:
+        target_embedding_model = initialize_embedding_model(args.target_face_embeddings, args, device)
     else:
-        print("Initializing Facenet model")
-        from facenet.inception_resnet_v1 import InceptionResnetV1
-        embedding_model = InceptionResnetV1()
-        embedding_model.load_state_dict(load_file(args.facenet_model_path))
-        embedding_model.eval()
-
-    embedding_model = embedding_model.to(device)
+        target_embedding_model = source_embedding_model
 
     process(
-        embedding_model,
+        source_embedding_model,
+        target_embedding_model,
         face_detector,
         original_aligner,
         aligner,

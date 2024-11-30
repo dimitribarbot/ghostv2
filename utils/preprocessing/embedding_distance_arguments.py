@@ -24,14 +24,15 @@ class EmbeddingDistanceArguments:
     cvl_adaface_model_path: str = make_real_path("./weights/CVLFace/cvlface_adaface_ir101_webface12m.safetensors")
     cvl_vit_model_path: str = make_real_path("./weights/CVLFace/cvlface_adaface_vit_base_webface4m.safetensors")
     facenet_model_path: str = make_real_path("./weights/Facenet/facenet_pytorch.safetensors")
-    face_embeddings: str = choice("facenet", "arcface", "adaface", "cvl_arcface", "cvl_adaface", "cvl_vit", default="cvl_adaface")
+    source_face_embeddings: str = choice("facenet", "arcface", "adaface", "cvl_arcface", "cvl_adaface", "cvl_vit", default="cvl_vit")
+    target_face_embeddings: str = choice("facenet", "arcface", "adaface", "cvl_arcface", "cvl_adaface", "cvl_vit", default="cvl_vit")
 
     """ Run arguments """
     device_id: int = 0
     source_crop_size: int = 256
     target_crop_size: int = 112
-    source_align_mode: str = choice("facexlib", "insightface_v1", "insightface_v2", "mtcnn", "cvlface", "original_cvlface", default="insightface_v2")
-    target_align_mode: str = choice("facexlib", "insightface_v1", "insightface_v2", "mtcnn", "cvlface", "original_cvlface", default="cvlface")
+    source_align_mode: str = choice("facexlib", "insightface_v1", "insightface_v2", "mtcnn", "cvlface", "original_cvlface", default="insightface_v1")
+    target_align_mode: str = choice("facexlib", "insightface_v1", "insightface_v2", "mtcnn", "cvlface", "original_cvlface", default="insightface_v2")
 
     """ Debug arguments """
     debug: bool = flag(default=False, negative_prefix="--no-")

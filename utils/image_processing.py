@@ -541,6 +541,32 @@ def enhance_face(
     return restored_face
 
 
+@torch.no_grad()
+def enhance_faces_in_original_image(
+    gfpgan: GFPGANv1Clean,
+    face_parser: BiSeNet,
+    rgb_image: cv2.typing.MatLike,
+    lmks: np.ndarray,
+    image_name: str,
+    device: str,
+):
+    upsample_img = cv2.cvtColor(rgb_image, cv2.COLOR_RGB2BGR)
+
+    for lmk in lmks:
+        cropped_face, affine_matrix = get_aligned_face_and_affine_matrix(upsample_img, lmk)
+        restored_face = enhance_face(gfpgan, cropped_face, image_name, device)
+        upsample_img = paste_face_back_facexlib(face_parser, upsample_img, restored_face, affine_matrix, True, device)
+
+    if np.max(upsample_img) > 256:  # 16-bit image
+        upsample_img = upsample_img.astype(np.uint16)
+    else:
+        upsample_img = upsample_img.astype(np.uint8)
+
+    upsample_img = cv2.cvtColor(upsample_img, cv2.COLOR_BGR2RGB)
+        
+    return upsample_img
+
+
 def save_image_with_landmarks(bgr_image: cv2.typing.MatLike, landmark: np.ndarray, save_path: str):
     for point in landmark:
         bgr_image = cv2.circle(bgr_image, (int(point[0]), int(point[1])), radius=2, color=(0, 0, 255), thickness=-1)

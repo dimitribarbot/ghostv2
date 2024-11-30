@@ -30,7 +30,7 @@ class InferenceArguments:
     face_embeddings: str = choice("facenet", "arcface", "adaface", "cvl_arcface", "cvl_adaface", "cvl_vit", default="cvl_vit")
     backbone: str = choice("unet", "linknet", "resnet", default="unet")
     num_blocks: int = 2
-    align_corners: bool = flag(default=True, negative_prefix="--no-")
+    align_corners: bool = flag(default=False, negative_prefix="--no-")
     precision: Optional[str] = choice(
         None,
         "64",
