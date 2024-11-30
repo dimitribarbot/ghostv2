@@ -14,7 +14,7 @@ def make_real_path(relative_path):
 @dataclass
 class TrainingArguments(EmbeddingModelsArguments):
     """ Info about this run """
-    run_name: str                                                           # Name of this run. Used to create folders where to save the weights.
+    run_name: str = "ghost_v2"                                              # Name of this run. Used to create folders where to save the weights.
 
     """ Dataset params """
     dataset_path: str = make_real_path("./datasets/LAION-Face/laion_face_cropped_256x256") # Path to the dataset. If not LAION dataset is used, param --laion should be set False
