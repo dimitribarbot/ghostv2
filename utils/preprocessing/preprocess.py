@@ -191,23 +191,44 @@ def get_faces_from_landmarks(
     return faces
 
 
-def is_face_size_ok(face: Dict[str, np.ndarray], eye_dist_threshold: int):
+def is_face_size_ok(face: Dict[str, np.ndarray], eye_dist_threshold: int, min_original_face_size: int):
     if face["kps"] is None:
         return False
 
     eye_dist = np.linalg.norm([face["kps"][0][0] - face["kps"][1][0], face["kps"][0][1] - face["kps"][1][1]])
 
-    return eye_dist >= eye_dist_threshold
+    if eye_dist < eye_dist_threshold:
+        return False
+    
+    if min_original_face_size <= 0:
+        return True
+    
+    if face["box"] is None:
+        return False
+    
+    x1 = face["box"][0]
+    y1 = face["box"][1]
+    x2 = face["box"][2]
+    y2 = face["box"][3]
+    
+    width = abs(x2 - x1)
+    height = abs(y2 - y1)
+
+    return width >= min_original_face_size and height >= min_original_face_size
 
 
-def filter_faces(faces: List[Dict[str, np.ndarray]], eye_dist_threshold: int):
-    return list(filter(lambda face: is_face_size_ok(face, eye_dist_threshold), faces))
+def filter_faces(faces: List[Dict[str, np.ndarray]], eye_dist_threshold: int, min_original_face_size: int):
+    return list(filter(lambda face: is_face_size_ok(face, eye_dist_threshold, min_original_face_size), faces))
 
 
-def verify_retargeted_faces_have_same_length(all_faces: List[List[Dict[str, np.ndarray]]], eye_dist_threshold: int):
+def verify_retargeted_faces_have_same_length(
+    all_faces: List[List[Dict[str, np.ndarray]]],
+    eye_dist_threshold: int,
+    min_original_face_size: int
+):
     if len(all_faces) > 0:
-        length = len(filter_faces(all_faces[0], eye_dist_threshold))
-        return all(len(filter_faces(l, eye_dist_threshold)) == length for l in all_faces)
+        length = len(filter_faces(all_faces[0], eye_dist_threshold, min_original_face_size))
+        return all(len(filter_faces(l, eye_dist_threshold, min_original_face_size)) == length for l in all_faces)
     return True
 
 
@@ -232,7 +253,7 @@ def preprocess(
     rgb_image = resize_to_limit(rgb_image, max_dim=1280, division=2)
 
     detected_faces = face_detector(rgb_image, threshold=0.97, return_dict=True)
-    detected_faces = filter_faces(detected_faces, args.eye_dist_threshold)
+    detected_faces = filter_faces(detected_faces, args.eye_dist_threshold, args.min_original_face_size)
     if len(detected_faces) == 0:
         return
 
@@ -306,13 +327,16 @@ def preprocess(
 
         retargeted_images_faces = face_detector(retargeted_images, threshold=0.97, return_dict=True, cv=True)
 
-        if not verify_retargeted_faces_have_same_length(retargeted_images_faces, args.eye_dist_threshold):
+        if not verify_retargeted_faces_have_same_length(
+            retargeted_images_faces, args.eye_dist_threshold, args.min_original_face_size
+        ):
             return
 
         for image_index, retargeted_image in enumerate(retargeted_images):
             retargeted_image_faces = filter_faces(
                 retargeted_images_faces[image_index],
-                args.eye_dist_threshold
+                args.eye_dist_threshold,
+                args.min_original_face_size
             )
 
             if len(retargeted_image_faces) == 0:

@@ -26,6 +26,7 @@ class PreprocessArguments:
     """ Run arguments """
     device_id: int = 0
     min_original_image_size: int = 250
+    min_original_face_size: int = 64
     eye_dist_threshold: int = 5
     final_crop_size: int = 256
     align_mode: str = choice("facexlib", "insightface_v1", "insightface_v2", "mtcnn", "cvlface", default="insightface_v2")
@@ -33,8 +34,8 @@ class PreprocessArguments:
 
     """ Retargeting options """
     retargeting: bool = flag(default=True, negative_prefix="--no-")
-    number_of_variants_per_face: int = 9
-    enhance_output_face: bool = flag(default=True, negative_prefix="--no-")
+    number_of_variants_per_face: int = 24
+    enhance_output_face: bool = flag(default=False, negative_prefix="--no-")
     enhance_faces_in_original_image: bool = flag(default=False, negative_prefix="--no-")
     retargeting_do_crop: bool = flag(default=False, negative_prefix="--no-")
     retargeting_crop_scale: float = 2.3
