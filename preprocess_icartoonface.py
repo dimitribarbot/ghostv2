@@ -193,10 +193,10 @@ def main(args: PreprocessICartoonFaceArguments):
     )
 
     face_detector = DassDetFace(
-        face_alignment,
         gpu_id=0,
         fp16=True,
-        model_path=args.dass_face_model_path
+        model_path=args.dass_face_model_path,
+        landmark_detector_model_path=args.dass_face_landmark_detector_model_path,
     )
 
     live_portrait_pipeline = LivePortraitPipeline(

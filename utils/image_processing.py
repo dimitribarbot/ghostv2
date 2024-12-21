@@ -626,14 +626,14 @@ def save_image(bgr_image: cv2.typing.MatLike, save_path: str):
     cv2.imwrite(save_path, bgr_image)
 
 
-def get_image_with_landmarks(bgr_image: cv2.typing.MatLike, landmark: np.ndarray, save_path: str):
+def get_image_with_landmarks(bgr_image: cv2.typing.MatLike, landmark: np.ndarray):
     bgr_image = bgr_image.copy()
     for point in landmark:
         bgr_image = cv2.circle(bgr_image, (int(point[0]), int(point[1])), radius=2, color=(0, 0, 255), thickness=-1)
     return bgr_image
 
 
-def get_image_with_bbox(bgr_image: cv2.typing.MatLike, bbox: list[np.ndarray], save_path: str):
+def get_image_with_bbox(bgr_image: cv2.typing.MatLike, bbox: list[np.ndarray]):
     bgr_image = bgr_image.copy()
     bgr_image = cv2.rectangle(bgr_image, (int(bbox[0]),  int(bbox[1])), (int(bbox[2]), int(bbox[3])), (0, 0, 255), thickness=2)
     return bgr_image
