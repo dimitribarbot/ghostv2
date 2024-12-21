@@ -28,7 +28,7 @@ def process(
     bgr_image = cv2.imread(args.source_image_path)
     rgb_image = cv2.cvtColor(bgr_image, cv2.COLOR_BGR2RGB)
 
-    detected_faces = face_detector(rgb_image, threshold=0.97, return_dict=True)
+    detected_faces = face_detector(rgb_image, threshold=args.detection_threshold, return_dict=True)
     if len(detected_faces) == 0:
         return
     

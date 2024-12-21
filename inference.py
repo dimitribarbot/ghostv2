@@ -73,6 +73,7 @@ class GhostV2Module(L.LightningModule):
     def __init__(self, args: InferenceArguments):
         super().__init__()
 
+        self.detection_threshold = args.detection_threshold
         self.source_face_index = args.source_face_index
         self.target_face_index = args.target_face_index
         self.enhance_output = args.enhance_output
@@ -145,8 +146,8 @@ class GhostV2Module(L.LightningModule):
 
         Xs_image, Xt_image = batch
 
-        Xs_detected_faces = self.face_detector(Xs_image, threshold=0.97, return_dict=True, cv=True)
-        Xt_detected_faces = self.face_detector(Xt_image, threshold=0.97, return_dict=True, cv=True)
+        Xs_detected_faces = self.face_detector(Xs_image, threshold=self.detection_threshold, return_dict=True, cv=True)
+        Xt_detected_faces = self.face_detector(Xt_image, threshold=self.detection_threshold, return_dict=True, cv=True)
 
         if len(Xs_detected_faces) == 0:
             raise ValueError("No face detected in source image!")

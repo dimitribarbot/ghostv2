@@ -91,7 +91,7 @@ def main(args: InferenceArguments):
             if i > 0 or j > 0:
                 if image_grid[i][j] is not None:
                     if args.paste_back_mode != "none" or i == 0 or j == 0:
-                        detected_faces = face_detector(image_grid[i][j], threshold=0.97, return_dict=True, cv=True)
+                        detected_faces = face_detector(image_grid[i][j], threshold=args.detection_threshold, return_dict=True, cv=True)
                         if len(detected_faces) == 0:
                             raise ValueError(f"No face detected in image for source {i} and target {j}!")
                         face_kps = detected_faces[0]["kps"]

@@ -26,6 +26,7 @@ class EmbeddingDistanceArguments(EmbeddingModelsArguments):
 
     """ Run arguments """
     device_id: int = 0
+    detection_threshold: float = 0.97
     source_crop_size: int = 256
     target_crop_size: int = 112
     source_align_mode: str = choice("facexlib", "insightface_v1", "insightface_v2", "mtcnn", "cvlface", "original_cvlface", default="insightface_v1")

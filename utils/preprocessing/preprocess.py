@@ -252,13 +252,14 @@ def preprocess(
 
     rgb_image = resize_to_limit(rgb_image, max_dim=1280, division=2)
 
-    detected_faces = face_detector(rgb_image, threshold=0.97, return_dict=True)
+    detected_faces = face_detector(rgb_image, threshold=args.detection_threshold, return_dict=True)
     detected_faces = filter_faces(detected_faces, args.eye_dist_threshold, args.min_original_face_size)
     if len(detected_faces) == 0:
         return
 
     bboxes = [detected_face["box"] for detected_face in detected_faces]
     kpss = [detected_face["kps"] for detected_face in detected_faces]
+    kpss68 = [detected_face["kps68"] for detected_face in detected_faces if "kps68" in detected_face]
 
     if args.enhance_faces_in_original_image:
         rgb_image = enhance_faces_in_original_image(gfpgan, face_parser, rgb_image, kpss, id, device)
@@ -288,7 +289,7 @@ def preprocess(
             )
         return
 
-    landmarks = face_alignment.get_landmarks_from_image(
+    landmarks = kpss68 or face_alignment.get_landmarks_from_image(
         rgb_image,
         detected_faces=bboxes,
     )
@@ -325,7 +326,7 @@ def preprocess(
         if len(retargeted_images) == 0:
             return
 
-        retargeted_images_faces = face_detector(retargeted_images, threshold=0.97, return_dict=True, cv=True)
+        retargeted_images_faces = face_detector(retargeted_images, threshold=args.detection_threshold, return_dict=True, cv=True)
 
         if not verify_retargeted_faces_have_same_length(
             retargeted_images_faces, args.eye_dist_threshold, args.min_original_face_size
@@ -370,7 +371,7 @@ def preprocess(
             image_name = f'{id}_{retargeted_face_index:02d}'
 
             face_retargeted_images = [random_horizontal_flip(retargeted_image) for retargeted_image in retargeted_images[retargeted_face_index]]
-            retargeted_faces = face_detector(face_retargeted_images, threshold=0.97, return_dict=True, cv=True)
+            retargeted_faces = face_detector(face_retargeted_images, threshold=args.detection_threshold, return_dict=True, cv=True)
 
             for image_index, retargeted_face in enumerate(retargeted_faces):
                 if len(retargeted_face) == 0:

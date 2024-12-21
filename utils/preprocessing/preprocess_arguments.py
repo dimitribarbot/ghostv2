@@ -25,6 +25,7 @@ class PreprocessArguments:
 
     """ Run arguments """
     device_id: int = 0
+    detection_threshold: float = 0.97
     min_original_image_size: int = 250
     min_original_face_size: int = 64
     eye_dist_threshold: int = 5

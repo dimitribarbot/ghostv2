@@ -24,6 +24,7 @@ class AlignArguments:
 
     """ Run arguments """
     device_id: int = 0
+    detection_threshold: float = 0.97
     final_crop_size: int = 256
     align_mode: str = choice("facexlib", "insightface_v1", "insightface_v2", "mtcnn", "cvlface", default="insightface_v2")
     overwrite: bool = flag(default=False, negative_prefix="--no-")

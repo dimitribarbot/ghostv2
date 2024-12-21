@@ -31,13 +31,14 @@ def process_one_image(
     final_crop_size: int,
     align_mode: str,
     aligner: Optional[DifferentiableFaceAligner],
+    detection_threshold: float,
     device: Optional[torch.device]=None,
 ):
     image = cv2.imread(source_image)
 
     os.makedirs(os.path.dirname(save_path), exist_ok=True)
 
-    detected_faces = face_detector(image, threshold=0.97, return_dict=True, cv=True)
+    detected_faces = face_detector(image, threshold=detection_threshold, return_dict=True, cv=True)
     if len(detected_faces) == 0:
         return None
 
@@ -65,6 +66,7 @@ def process(
     overwrite: bool,
     align_mode: str,
     aligner: Optional[DifferentiableFaceAligner],
+    detection_threshold: float,
     device: Optional[torch.device]=None,
 ):
     if source_image is None and source_folder is None:
@@ -85,6 +87,7 @@ def process(
                 final_crop_size,
                 align_mode,
                 aligner,
+                detection_threshold,
                 device
             )
             if save_path is not None:
@@ -115,6 +118,7 @@ def process(
                             final_crop_size,
                             align_mode,
                             aligner,
+                            detection_threshold,
                             device
                         )
                         if save_path is None:
@@ -156,6 +160,7 @@ def main(args: AlignArguments):
         args.overwrite,
         args.align_mode,
         aligner,
+        args.detection_threshold,
         device
     )
 
