@@ -8,10 +8,13 @@ from typing import cast
 from simple_parsing import ArgumentParser
 
 import cv2
+from PIL import Image
+import numpy as np
 import torch
 from torch.utils.data import DataLoader
 from safetensors.torch import load_file
 import lightning as L
+from diffusers import AutoPipelineForInpainting
 
 from FaceAlignment.api import FaceAlignment, LandmarksType
 from Ghost.AEI_Net import *
@@ -20,8 +23,10 @@ from BiSeNet.bisenet import BiSeNet
 from GFPGAN.gfpganv1_clean_arch import GFPGANv1Clean
 from RetinaFace.detector import RetinaFace
 from utils.image_processing import (
+    get_edge_mask,
     get_face_embeddings,
     convert_to_batch_tensor,
+    get_padding_to_fit_resolution_multiple,
     initialize_embedding_model,
     paste_face_back_basic,
     paste_face_back_ghost,
@@ -80,6 +85,7 @@ class GhostV2Module(L.LightningModule):
         self.align_mode = args.align_mode
         self.face_embeddings = args.face_embeddings
         self.paste_back_mode = args.paste_back_mode
+        self.inpaint_output = args.inpaint_output
 
         self.debug = args.debug
         self.debug_ghost_landmarks = args.debug_ghost_landmarks
@@ -139,6 +145,21 @@ class GhostV2Module(L.LightningModule):
         self.aligner = None
         if args.align_mode == "cvlface":
             self.aligner = get_aligner(args.cvlface_aligner_model_path)
+
+        self.sd_pipe = None
+
+    
+    def setup(self, stage: str):
+        if self.inpaint_output and self.sd_pipe is None:
+            self.sd_pipe = AutoPipelineForInpainting.from_pretrained(
+                "diffusers/stable-diffusion-xl-1.0-inpainting-0.1",
+                torch_dtype=torch.float16,
+                variant="fp16",
+                use_safetensors=True,
+            )
+            self.sd_pipe.enable_xformers_memory_efficient_attention()
+            self.sd_pipe.enable_vae_tiling()
+            self.sd_pipe.to(self.device)
 
     
     def predict_step(self, batch):
@@ -231,17 +252,51 @@ class GhostV2Module(L.LightningModule):
             cv2.imwrite(self.debug_enhanced_face_path, Yt_face_enhanced)
 
         if self.paste_back_mode == "facexlib_with_parser":
-            Yt_image = paste_face_back_facexlib(self.face_parser, Xt_image, Yt_face_enhanced, Xt_affine_matrix, True, self.device)
+            Yt_image, Yt_mask = paste_face_back_facexlib(self.face_parser, Xt_image, Yt_face_enhanced, Xt_affine_matrix, True, self.device)
         elif self.paste_back_mode == "facexlib_without_parser":
-            Yt_image = paste_face_back_facexlib(self.face_parser, Xt_image, Yt_face_enhanced, Xt_affine_matrix, False, self.device)
+            Yt_image, Yt_mask = paste_face_back_facexlib(self.face_parser, Xt_image, Yt_face_enhanced, Xt_affine_matrix, False, self.device)
         elif self.paste_back_mode == "insightface":
-            Yt_image = paste_face_back_insightface(Xt_image, Xt_face, Yt_face_enhanced, Xt_affine_matrix)
+            Yt_image, Yt_mask = paste_face_back_insightface(Xt_image, Xt_face, Yt_face_enhanced, Xt_affine_matrix)
         elif self.paste_back_mode == "ghost":
-            Yt_image = paste_face_back_ghost(Xt_image, Xs_face, Yt_face_enhanced, Xs_face_landmarks_68, Xt_face_landmarks_68, Xt_affine_matrix)
+            Yt_image, Yt_mask = paste_face_back_ghost(Xt_image, Xs_face, Yt_face_enhanced, Xs_face_landmarks_68, Xt_face_landmarks_68, Xt_affine_matrix)
         elif self.paste_back_mode == "basic":
             Yt_image = paste_face_back_basic(Xt_image, Yt_face_enhanced, Xt_affine_matrix)
+            Yt_mask = None
         else:
             Yt_image = Yt_face_enhanced
+            Yt_mask = None
+        
+        if self.inpaint_output and Yt_mask is not None:
+            Yt_image_rgba = cv2.cvtColor(Yt_image, cv2.COLOR_BGR2RGBA)
+            Yt_edge_mask = get_edge_mask(Yt_mask)
+
+            H_raw, W_raw, _ = Yt_image_rgba.shape
+            W_pad, H_pad = get_padding_to_fit_resolution_multiple((W_raw, H_raw))
+
+            Yt_image_rgba_padded = np.pad(Yt_image_rgba, [[0, H_pad], [0, W_pad], [0, 0]], mode="edge")
+            Yt_edge_mask_padded = np.pad(Yt_edge_mask, [[0, H_pad], [0, W_pad]], mode="edge")
+
+            Yt_image_rgba_padded = Image.fromarray(Yt_image_rgba_padded)
+            Yt_edge_mask_padded = Image.fromarray(Yt_edge_mask_padded)
+
+            blurred_mask = self.sd_pipe.mask_processor.blur(Yt_edge_mask_padded, blur_factor=4)
+
+            Yt_inpainted = self.sd_pipe(
+                prompt="a person's face",
+                negative_prompt="deformed, glitch, noise, noisy, cross-eyed, bad anatomy, ugly, disfigured, sloppy, duplicate, mutated",
+                image=Yt_image_rgba_padded,
+                mask_image=blurred_mask,
+                width=Yt_image_rgba_padded.width,
+                height=Yt_image_rgba_padded.height,
+                num_inference_steps=20,
+                guidance_scale=8.0,
+                strength=0.4,
+                padding_mask_crop=64,
+            ).images[0]
+
+            Yt_inpainted = cv2.cvtColor(np.ascontiguousarray(np.array(Yt_inpainted)[:H_raw, :W_raw].copy()).copy(), cv2.COLOR_RGBA2BGR)
+
+            return Yt_inpainted
 
         return Yt_image
 

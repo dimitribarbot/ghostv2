@@ -14,6 +14,7 @@ from safetensors.torch import load_file
 
 import numpy as np
 from PIL import Image
+from scipy.ndimage import binary_dilation, binary_erosion
 from skimage import transform as trans
 
 from BiSeNet.bisenet import BiSeNet
@@ -444,6 +445,7 @@ def paste_face_back_facexlib(
         MASK_COLORMAP = [0, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 0, 255, 0, 0, 0]
         for idx, color in enumerate(MASK_COLORMAP):
             mask[out == idx] = color
+        eroded_mask = mask.copy()
         #  blur the mask
         mask = cv2.GaussianBlur(mask, (101, 101), 11)
         mask = cv2.GaussianBlur(mask, (101, 101), 11)
@@ -455,21 +457,30 @@ def paste_face_back_facexlib(
         mask[:, -thres:] = 0
         mask = mask / 255.
 
+        eroded_mask[:thres, :] = 0
+        eroded_mask[-thres:, :] = 0
+        eroded_mask[:, :thres] = 0
+        eroded_mask[:, -thres:] = 0
+        eroded_mask = eroded_mask / 255.
+
         mask = cv2.resize(mask, restored_face.shape[:2])
         mask = cv2.warpAffine(mask, inverse_affine, target_image_size, flags=3)
         inv_soft_mask = mask[:, :, None]
+
+        eroded_mask = cv2.resize(eroded_mask, restored_face.shape[:2])
+        eroded_mask = cv2.warpAffine(eroded_mask, inverse_affine, target_image_size, flags=3)
     else:
         mask = np.ones(face_size, dtype=np.float32)
         inv_mask = cv2.warpAffine(mask, inverse_affine, target_image_size)
         # remove the black borders
-        inv_mask_erosion = cv2.erode(
-            inv_mask, np.ones((2, 2), np.uint8))
+        inv_mask_erosion = cv2.erode(inv_mask, np.ones((2, 2), np.uint8))
         inv_restored = inv_mask_erosion[:, :, None] * inv_restored
         total_face_area = np.sum(inv_mask_erosion)  # // 3
         # compute the fusion edge based on the area of face
         w_edge = int(total_face_area**0.5) // 20
         erosion_radius = w_edge * 2
         inv_mask_center = cv2.erode(inv_mask_erosion, np.ones((erosion_radius, erosion_radius), np.uint8))
+        eroded_mask = inv_mask_center.copy()
         blur_size = w_edge * 2
         inv_soft_mask = cv2.GaussianBlur(inv_mask_center, (blur_size + 1, blur_size + 1), 0)
         if len(target_image.shape) == 2:  # original_image is gray image
@@ -487,8 +498,10 @@ def paste_face_back_facexlib(
         target_image = target_image.astype(np.uint16)
     else:
         target_image = target_image.astype(np.uint8)
+
+    eroded_mask = (eroded_mask * 255).astype(np.uint8)
     
-    return target_image
+    return target_image, eroded_mask
 
 
 # Modified from https://github.com/deepinsight/insightface/blob/master/python-package/insightface/model_zoo/inswapper.py
@@ -498,45 +511,30 @@ def paste_face_back_insightface(
     restored_face: cv2.typing.MatLike,
     affine_matrix: np.ndarray,
 ):
-    fake_diff = restored_face.astype(np.float32) - target_face.astype(np.float32)
-    fake_diff = np.abs(fake_diff).mean(axis=2)
-    fake_diff[:2,:] = 0
-    fake_diff[-2:,:] = 0
-    fake_diff[:,:2] = 0
-    fake_diff[:,-2:] = 0
     IM = cv2.invertAffineTransform(affine_matrix)
-    img_white = np.full((target_face.shape[0],target_face.shape[1]), 255, dtype=np.float32)
+    img_white = np.full((target_face.shape[0], target_face.shape[1]), 255, dtype=np.float32)
     restored_face = cv2.warpAffine(restored_face, IM, (target_image.shape[1], target_image.shape[0]), borderValue=0.0)
     img_white = cv2.warpAffine(img_white, IM, (target_image.shape[1], target_image.shape[0]), borderValue=0.0)
-    fake_diff = cv2.warpAffine(fake_diff, IM, (target_image.shape[1], target_image.shape[0]), borderValue=0.0)
-    img_white[img_white>20] = 255
-    fthresh = 10
-    fake_diff[fake_diff<fthresh] = 0
-    fake_diff[fake_diff>=fthresh] = 255
+    img_white[img_white > 20] = 255
     img_mask = img_white
     mask_h_inds, mask_w_inds = np.where(img_mask==255)
     mask_h = np.max(mask_h_inds) - np.min(mask_h_inds)
     mask_w = np.max(mask_w_inds) - np.min(mask_w_inds)
-    mask_size = int(np.sqrt(mask_h*mask_w))
-    k = max(mask_size//10, 10)
-    kernel = np.ones((k,k),np.uint8)
-    img_mask = cv2.erode(img_mask,kernel,iterations = 1)
-    kernel = np.ones((2,2),np.uint8)
-    fake_diff = cv2.dilate(fake_diff,kernel,iterations = 1)
-    k = max(mask_size//20, 5)
+    mask_size = int(np.sqrt(mask_h * mask_w))
+    k = max(mask_size // 10, 10)
+    kernel = np.ones((k, k),np.uint8)
+    img_mask = cv2.erode(img_mask, kernel, iterations=1)
+    eroded_mask = img_mask.copy().astype(np.uint8)
+    kernel = np.ones((2, 2),np.uint8)
+    k = max(mask_size // 20, 5)
     kernel_size = (k, k)
-    blur_size = tuple(2*i+1 for i in kernel_size)
+    blur_size = tuple(2 * i + 1 for i in kernel_size)
     img_mask = cv2.GaussianBlur(img_mask, blur_size, 0)
-    k = 5
-    kernel_size = (k, k)
-    blur_size = tuple(2*i+1 for i in kernel_size)
-    fake_diff = cv2.GaussianBlur(fake_diff, blur_size, 0)
     img_mask /= 255
-    fake_diff /= 255
-    img_mask = np.reshape(img_mask, [img_mask.shape[0],img_mask.shape[1],1])
-    fake_merged = img_mask * restored_face + (1-img_mask) * target_image.astype(np.float32)
+    img_mask = np.reshape(img_mask, [img_mask.shape[0], img_mask.shape[1], 1])
+    fake_merged = img_mask * restored_face + (1 - img_mask) * target_image.astype(np.float32)
     fake_merged = fake_merged.astype(np.uint8)
-    return fake_merged
+    return fake_merged, eroded_mask
 
 
 # Modified from https://github.com/ai-forever/ghost/blob/main/utils/inference/image_processing.py
@@ -546,17 +544,23 @@ def paste_face_back_ghost(
     restored_face: cv2.typing.MatLike,
     source_face_landmarks_68: cv2.typing.MatLike,
     target_face_landmarks_68: cv2.typing.MatLike,
-    affine_matrix: np.ndarray,
+    target_affine_matrix: np.ndarray,
 ):
     target_image_size = (target_image.shape[1], target_image.shape[0])
-    mask, _ = face_mask_static(source_face[:, :, ::-1], source_face_landmarks_68, target_face_landmarks_68)
-    mat_rev = cv2.invertAffineTransform(affine_matrix)
-    swap_t = cv2.warpAffine(restored_face, mat_rev, target_image_size, borderMode=cv2.BORDER_REPLICATE)
-    mask_t = cv2.warpAffine(mask, mat_rev, target_image_size)
+    reversed_target_affine_matrix = cv2.invertAffineTransform(target_affine_matrix)
+    swap_t = cv2.warpAffine(restored_face, reversed_target_affine_matrix, target_image_size, borderMode=cv2.BORDER_REPLICATE)
+    mask, original_mask, original_mask_tgt = face_mask_static(source_face[:, :, ::-1], source_face_landmarks_68, target_face_landmarks_68)
+    mask_t = cv2.warpAffine(mask, reversed_target_affine_matrix, target_image_size)
     mask_t = np.expand_dims(mask_t, 2)
     final = mask_t * swap_t + (1 - mask_t) * target_image
     final = np.array(final, dtype='uint8')
-    return final
+    original_mask_t = cv2.warpAffine(original_mask, reversed_target_affine_matrix, target_image_size)
+    original_mask_tgt_t = cv2.warpAffine(original_mask_tgt, reversed_target_affine_matrix, target_image_size)
+    original_mask_t = (original_mask_t * 255).astype(np.uint8)
+    original_mask_tgt_t = (original_mask_tgt_t * 255).astype(np.uint8)
+    merged_original_mask_t = np.zeros_like(original_mask_t)
+    merged_original_mask_t[(original_mask_t>0) & (original_mask_tgt_t>0)] = 255
+    return final, merged_original_mask_t
 
 
 @torch.no_grad()
@@ -660,3 +664,53 @@ def random_horizontal_flip(bgr_image: cv2.typing.MatLike):
     if random_flip:
         return cv2.flip(bgr_image, 1)
     return bgr_image
+
+
+def dilate_mask(mask: np.ndarray, dilatation_amount: int):
+    dilation_amt_abs = abs(dilatation_amount)
+    x, y = np.meshgrid(np.arange(dilation_amt_abs), np.arange(dilation_amt_abs))
+    center = dilation_amt_abs // 2
+    if dilatation_amount < 0:
+        dilation_kernel = (
+            (x - center) ** 2 + (y - center) ** 2 <= center**2
+        ).astype(np.uint8)
+        dilated_binary_img = binary_erosion(mask, dilation_kernel)
+    else:
+        dilation_kernel = (
+            (x - center) ** 2 + (y - center) ** 2 <= center**2
+        ).astype(np.uint8)
+        dilated_binary_img = binary_dilation(mask, dilation_kernel)
+    return cast(np.ndarray, dilated_binary_img)
+
+
+def get_edge_mask(mask: np.ndarray):
+    mask_h_inds, mask_w_inds = np.where(mask==255)
+    mask_h = np.max(mask_h_inds) - np.min(mask_h_inds)
+    mask_w = np.max(mask_w_inds) - np.min(mask_w_inds)
+    mask_size = int(np.sqrt(mask_h * mask_w))
+    dilatation_amount = max(((mask_size // 4) // 4) * 4, 4)
+    dilate_binary_img = dilate_mask(mask, dilatation_amount)
+    erode_binary_img = dilate_mask(mask, -dilatation_amount)
+    binary_img = dilate_binary_img ^ erode_binary_img
+    binary_img = binary_img.astype(np.uint8) * 255
+    return binary_img
+
+
+def show_mask(image_np: np.ndarray, mask: np.ndarray, alpha=0.5):
+    image = image_np.copy()
+    mask = mask.astype(np.bool_)
+    np.random.seed(0)
+    color = np.concatenate([np.random.random(3), np.array([0.6])], axis=0)
+    image[mask] = image[mask] * (1 - alpha) + 255 * color.reshape(1, 1, -1) * alpha
+    return image.astype(np.uint8)
+
+
+def get_padding_to_fit_resolution_multiple(image_size: tuple[float, float], resolution_multiple=8):
+    W_raw, H_raw = image_size
+    W_raw_mod_dimension = W_raw // resolution_multiple
+    H_raw_mod_dimension = H_raw // resolution_multiple
+    W_target = W_raw if W_raw_mod_dimension == W_raw else (W_raw_mod_dimension + 1) * resolution_multiple
+    H_target = H_raw if H_raw_mod_dimension == H_raw else (H_raw_mod_dimension + 1) * resolution_multiple
+    W_pad = int(W_target - W_raw)
+    H_pad = int(H_target - H_raw)
+    return W_pad, H_pad

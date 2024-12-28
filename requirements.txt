@@ -1,4 +1,7 @@
-torch
+diffusers[torch]
+transformers
+accelerate
+xformers
 torchvision
 numpy
 opencv-python

@@ -48,6 +48,7 @@ class InferenceArguments(EmbeddingModelsArguments):
     """ Run arguments """
     device_id: int = 0
     detection_threshold: float = 0.97
+    inpaint_output: bool = flag(default=True, negative_prefix="--no-")
     enhance_output: bool = flag(default=True, negative_prefix="--no-")
     source_face_index: int = 0
     target_face_index: int = 0

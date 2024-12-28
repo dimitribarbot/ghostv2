@@ -40,74 +40,73 @@ def get_mask(image: np.ndarray, landmarks: np.ndarray) -> np.ndarray:
     return mask
 
 
-def face_mask_static(image: np.ndarray, landmarks: np.ndarray, landmarks_tgt: np.ndarray, params = None) -> np.ndarray:
+def face_mask_static(image: np.ndarray, landmarks: np.ndarray, landmarks_tgt: np.ndarray) -> np.ndarray:
     """
     Get the final mask, using landmarks and applying blur
     """
-    if params is None:
+    left = np.sum((landmarks[0] - landmarks_tgt[0], landmarks[3] - landmarks_tgt[3], landmarks[1] - landmarks_tgt[1]))
+    right = np.sum((landmarks_tgt[16] - landmarks[16], landmarks_tgt[13] - landmarks[13], landmarks_tgt[15] - landmarks[15]))
     
-        left = np.sum((landmarks[0]-landmarks_tgt[0], landmarks[3]-landmarks_tgt[3], landmarks[1]-landmarks_tgt[1]))
-        right = np.sum((landmarks_tgt[16]-landmarks[16], landmarks_tgt[13]-landmarks[13], landmarks_tgt[15]-landmarks[15]))
-        
-        offset = max(left, right)
-        
-        if offset > 6:
-            erode = 15
-            sigmaX = 15
-            sigmaY = 10
-        elif offset > 3:
-            erode = 10
-            sigmaX = 10
-            sigmaY = 8
-        elif offset < -3:
-            erode = -5
-            sigmaX = 5
-            sigmaY = 10
-        else:
-            erode = 5
-            sigmaX = 5
-            sigmaY = 5
-        
+    offset = max(left, right)
+    
+    if offset > 6:
+        erode = 15
+        sigmaX = 15
+        sigmaY = 10
+    elif offset > 3:
+        erode = 10
+        sigmaX = 10
+        sigmaY = 8
+    elif offset < -3:
+        erode = -5
+        sigmaX = 5
+        sigmaY = 10
     else:
-        erode = params[0]
-        sigmaX = params[1]
-        sigmaY = params[2]
+        erode = 5
+        sigmaX = 5
+        sigmaY = 5
     
     if erode == 15:
-        eyebrows_expand_mod=2.7
+        eyebrows_expand_mod = 2.7
     elif erode == -5:
-        eyebrows_expand_mod=0.5
+        eyebrows_expand_mod = 0.5
     else:
-        eyebrows_expand_mod=2.0
+        eyebrows_expand_mod = 2.0
     landmarks = expand_eyebrows(landmarks, eyebrows_expand_mod=eyebrows_expand_mod)
+    landmarks_tgt = expand_eyebrows(landmarks_tgt, eyebrows_expand_mod=2.0)
     
     mask = get_mask(image, landmarks)
-    mask = erode_and_blur(mask, erode, sigmaX, sigmaY, True)
+    mask_tgt = get_mask(image, landmarks_tgt)
+
+    mask, eroded_mask = erode_and_blur(mask, erode, sigmaX, sigmaY, fade_to_border=True)
+    eroded_mask_tgt = erode_mask(mask_tgt, 5, 5, fade_to_border=True)
     
-    if params is None:
-        return mask/255, [erode, sigmaX, sigmaY]
-        
-    return mask/255
+    return mask / 255, eroded_mask / 255, eroded_mask_tgt / 255
 
 
-def erode_and_blur(mask_input, erode, sigmaX, sigmaY, fade_to_border = True):
+def erode_mask(mask_input, erode, sigmaY, fade_to_border):
     mask = np.copy(mask_input)
     
     if erode > 0:
         kernel = np.ones((erode, erode), 'uint8')
         mask = cv2.erode(mask, kernel, iterations=1)
-    
     else:
         kernel = np.ones((-erode, -erode), 'uint8')
         mask = cv2.dilate(mask, kernel, iterations=1)
         
     if fade_to_border:
         clip_size = sigmaY * 2
-        mask[:clip_size,:] = 0
-        mask[-clip_size:,:] = 0
-        mask[:,:clip_size] = 0
-        mask[:,-clip_size:] = 0
+        mask[:clip_size, :] = 0
+        mask[-clip_size:, :] = 0
+        mask[:, :clip_size] = 0
+        mask[:, -clip_size:] = 0
     
-    mask = cv2.GaussianBlur(mask, (0, 0), sigmaX = sigmaX, sigmaY = sigmaY)
-        
     return mask
+
+
+def erode_and_blur(mask_input, erode, sigmaX, sigmaY, fade_to_border):
+    mask = erode_mask(mask_input, erode, sigmaY, fade_to_border)
+    
+    blurred_mask = cv2.GaussianBlur(mask, (0, 0), sigmaX = sigmaX, sigmaY = sigmaY)
+        
+    return blurred_mask, mask
