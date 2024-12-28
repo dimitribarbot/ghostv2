@@ -256,7 +256,8 @@ class GhostV2Module(L.LightningModule):
         elif self.paste_back_mode == "facexlib_without_parser":
             Yt_image, Yt_mask = paste_face_back_facexlib(self.face_parser, Xt_image, Yt_face_enhanced, Xt_affine_matrix, False, self.device)
         elif self.paste_back_mode == "insightface":
-            Yt_image, Yt_mask = paste_face_back_insightface(Xt_image, Xt_face, Yt_face_enhanced, Xt_affine_matrix)
+            Yt_image = paste_face_back_insightface(Xt_image, Xt_face, Yt_face_enhanced, Xt_affine_matrix)
+            Yt_mask = None
         elif self.paste_back_mode == "ghost":
             Yt_image, Yt_mask = paste_face_back_ghost(Xt_image, Xs_face, Yt_face_enhanced, Xs_face_landmarks_68, Xt_face_landmarks_68, Xt_affine_matrix)
         elif self.paste_back_mode == "basic":

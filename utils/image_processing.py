@@ -469,6 +469,7 @@ def paste_face_back_facexlib(
 
         eroded_mask = cv2.resize(eroded_mask, restored_face.shape[:2])
         eroded_mask = cv2.warpAffine(eroded_mask, inverse_affine, target_image_size, flags=3)
+        eroded_mask = (eroded_mask * 255).astype(np.uint8)
     else:
         mask = np.ones(face_size, dtype=np.float32)
         inv_mask = cv2.warpAffine(mask, inverse_affine, target_image_size)
@@ -480,12 +481,12 @@ def paste_face_back_facexlib(
         w_edge = int(total_face_area**0.5) // 20
         erosion_radius = w_edge * 2
         inv_mask_center = cv2.erode(inv_mask_erosion, np.ones((erosion_radius, erosion_radius), np.uint8))
-        eroded_mask = inv_mask_center.copy()
         blur_size = w_edge * 2
         inv_soft_mask = cv2.GaussianBlur(inv_mask_center, (blur_size + 1, blur_size + 1), 0)
         if len(target_image.shape) == 2:  # original_image is gray image
             target_image = target_image[:, :, None]
         inv_soft_mask = inv_soft_mask[:, :, None]
+        eroded_mask = None
 
     if len(target_image.shape) == 3 and target_image.shape[2] == 4:  # alpha channel
         alpha = target_image[:, :, 3:]
@@ -498,8 +499,6 @@ def paste_face_back_facexlib(
         target_image = target_image.astype(np.uint16)
     else:
         target_image = target_image.astype(np.uint8)
-
-    eroded_mask = (eroded_mask * 255).astype(np.uint8)
     
     return target_image, eroded_mask
 
@@ -524,7 +523,6 @@ def paste_face_back_insightface(
     k = max(mask_size // 10, 10)
     kernel = np.ones((k, k),np.uint8)
     img_mask = cv2.erode(img_mask, kernel, iterations=1)
-    eroded_mask = img_mask.copy().astype(np.uint8)
     kernel = np.ones((2, 2),np.uint8)
     k = max(mask_size // 20, 5)
     kernel_size = (k, k)
@@ -534,7 +532,7 @@ def paste_face_back_insightface(
     img_mask = np.reshape(img_mask, [img_mask.shape[0], img_mask.shape[1], 1])
     fake_merged = img_mask * restored_face + (1 - img_mask) * target_image.astype(np.float32)
     fake_merged = fake_merged.astype(np.uint8)
-    return fake_merged, eroded_mask
+    return fake_merged
 
 
 # Modified from https://github.com/ai-forever/ghost/blob/main/utils/inference/image_processing.py
