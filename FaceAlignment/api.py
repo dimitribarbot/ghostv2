@@ -1,10 +1,13 @@
-import torch
 import warnings
 from enum import IntEnum
-import numpy as np
 from packaging import version
 import importlib
 
+import numpy as np
+import torch
+from safetensors.torch import load_file
+
+from .models import FAN
 from .utils import *
 
 root_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -52,13 +55,14 @@ models_urls = {
 
 
 class FaceAlignment:
-    def __init__(self, landmarks_type, network_size=NetworkSize.LARGE,
+    def __init__(self, landmarks_type, network_size=NetworkSize.LARGE, safetensors_file_path=None,
                  device='cuda', dtype=torch.float32, flip_input=False, face_detector='retinaface', face_detector_kwargs=None, verbose=False):
         self.device = device
         self.flip_input = flip_input
         self.landmarks_type = landmarks_type
         self.verbose = verbose
         self.dtype = dtype
+        self.use_safetensors = safetensors_file_path is not None
 
         if version.parse(torch.__version__) < version.parse('1.5.0'):
             raise ImportError(f'Unsupported pytorch version detected. Minimum supported version of pytorch: 1.5.0\
@@ -87,8 +91,12 @@ class FaceAlignment:
             network_name = '2DFAN-' + str(network_size)
         else:
             network_name = '3DFAN-' + str(network_size)
-        self.face_alignment_net = torch.jit.load(
-            load_file_from_url(models_urls.get(pytorch_version, default_model_urls)[network_name], model_dir))
+        if self.use_safetensors:
+            self.face_alignment_net = FAN(network_size)
+            self.face_alignment_net.load_state_dict(load_file(safetensors_file_path), strict=True)
+        else:
+            self.face_alignment_net = torch.jit.load(
+                load_file_from_url(models_urls.get(pytorch_version, default_model_urls)[network_name], model_dir))
 
         self.face_alignment_net.to(device, dtype=dtype)
         self.face_alignment_net.eval()
@@ -154,9 +162,15 @@ class FaceAlignment:
             inp = inp.to(self.device, dtype=self.dtype)
             inp.div_(255.0).unsqueeze_(0)
 
-            out = self.face_alignment_net(inp).detach()
+            if self.use_safetensors:
+                out = self.face_alignment_net(inp)[-1].detach()
+            else:
+                out = self.face_alignment_net(inp).detach()
             if self.flip_input:
-                out += flip(self.face_alignment_net(flip(inp)).detach(), is_label=True)
+                if self.use_safetensors:
+                    out += flip(self.face_alignment_net(flip(inp))[-1].detach(), is_label=True)
+                else:
+                    out += flip(self.face_alignment_net(flip(inp)).detach(), is_label=True)
             out = out.to(device='cpu', dtype=torch.float32).numpy()
 
             pts, pts_img, scores = get_preds_fromhm(out, center.numpy(), scale)

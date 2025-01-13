@@ -115,13 +115,11 @@ def main(args: PreprocessLagendaArguments):
 
     face_alignment = FaceAlignment(
         LandmarksType.TWO_D,
+        safetensors_file_path=args.face_alignment_model_path,
         flip_input=False,
         device=device,
         dtype=torch.float16,
-        face_detector="retinaface",
-        face_detector_kwargs={
-            "path_to_detector": args.retina_face_model_path
-        }
+        face_detector="default",
     )
 
     live_portrait_pipeline = LivePortraitPipeline(

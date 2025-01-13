@@ -21,6 +21,7 @@ class InferenceArguments(EmbeddingModelsArguments):
     """ Model params """
     G_path: str = make_real_path("./experiments/saved_models_ghost_v2_5_sch_part2/G_latest.safetensors")
     gfpgan_model_path: str = make_real_path("./weights/GFPGAN/GFPGANv1.4.safetensors")
+    face_alignment_model_path: str = make_real_path("./weights/FaceAlignment/landmark.safetensors")
     face_parser_model_path: str = make_real_path("./weights/BiSeNet/79999_iter.safetensors")
     retina_face_model_path: str = make_real_path("./weights/RetinaFace/Resnet50_Final.safetensors")
     cvlface_aligner_model_path: str = make_real_path("./weights/CVLFace/cvlface_DFA_mobilenet.safetensors")

@@ -4,7 +4,6 @@ import cv2
 import torch
 
 from DASS.detector import DassDetFace
-from FaceAlignment.api import FaceAlignment, LandmarksType
 from utils.image_processing import get_aligned_face_and_affine_matrix, save_image_with_bbox_and_landmark, save_image, save_image_with_landmarks
 
 

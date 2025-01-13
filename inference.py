@@ -134,12 +134,10 @@ class GhostV2Module(L.LightningModule):
         if args.paste_back_mode == "ghost":
             self.face_alignment = FaceAlignment(
                 LandmarksType.TWO_D,
+                safetensors_file_path=args.face_alignment_model_path,
                 flip_input=False,
                 dtype=torch.float16,
-                face_detector="retinaface",
-                face_detector_kwargs={
-                    "path_to_detector": args.retina_face_model_path
-                }
+                face_detector="default",
             )
 
         self.aligner = None
