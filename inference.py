@@ -15,6 +15,7 @@ from torch.utils.data import DataLoader
 from safetensors.torch import load_file
 import lightning as L
 from diffusers import AutoPipelineForInpainting
+from transformers import AutoModelForImageClassification, ViTImageProcessor
 
 from FaceAlignment.api import FaceAlignment, LandmarksType
 from Ghost.AEI_Net import *
@@ -144,10 +145,20 @@ class GhostV2Module(L.LightningModule):
         if args.align_mode == "cvlface":
             self.aligner = get_aligner(args.cvlface_aligner_model_path)
 
+        self.nsfw_processor = None
+        self.nsfw_detector_pipe = None
         self.sd_pipe = None
 
     
     def setup(self, stage: str):
+        self.nsfw_processor = ViTImageProcessor.from_pretrained(
+            "AdamCodd/vit-base-nsfw-detector"
+        )
+        self.nsfw_detector_pipe = AutoModelForImageClassification.from_pretrained(
+            "AdamCodd/vit-base-nsfw-detector",
+            use_safetensors=True,
+        )
+
         if self.inpaint_output and self.sd_pipe is None:
             self.sd_pipe = AutoPipelineForInpainting.from_pretrained(
                 "diffusers/stable-diffusion-xl-1.0-inpainting-0.1",
@@ -164,6 +175,12 @@ class GhostV2Module(L.LightningModule):
         print("Running predict step.")
 
         Xs_image, Xt_image = batch
+
+        Xt_image_tensor = self.nsfw_processor(images=Xt_image[:, :, ::-1], return_tensors="pt").to(self.device)
+        Xt_image_nsfw_predicted_class_index = self.nsfw_detector_pipe(**Xt_image_tensor).logits.argmax(-1).item()
+        Xt_image_nsfw_predicted_class = self.nsfw_detector_pipe.config.id2label[Xt_image_nsfw_predicted_class_index]
+        if Xt_image_nsfw_predicted_class == "nsfw":
+            raise ValueError("NSFW detected in target image! Aborting.")
 
         Xs_detected_faces = self.face_detector(Xs_image, threshold=self.detection_threshold, return_dict=True, cv=True)
         Xt_detected_faces = self.face_detector(Xt_image, threshold=self.detection_threshold, return_dict=True, cv=True)
