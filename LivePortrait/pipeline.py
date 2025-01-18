@@ -333,8 +333,10 @@ class LivePortraitPipeline(object):
             combined_eye_ratio_tensor = self.calc_combined_eye_ratio_multi(input_eye_ratio, source_lmk_user)
             combined_lip_ratio_tensor = self.calc_combined_lip_ratio_multi(input_lip_ratio, source_lmk_user)
 
-            eyes_delta[i_eye] = self.wrapper.retarget_eye(x_s_user[i_eye].squeeze(1), combined_eye_ratio_tensor[i_eye].squeeze(1)).unsqueeze(1)
-            lip_delta[i_lip] = self.wrapper.retarget_lip(x_s_user[i_lip].squeeze(1), combined_lip_ratio_tensor[i_lip].squeeze(1)).unsqueeze(1)
+            if i_eye.size(0) > 0:
+                eyes_delta[i_eye] = self.wrapper.retarget_eye(x_s_user[i_eye].squeeze(1), combined_eye_ratio_tensor[i_eye].squeeze(1)).unsqueeze(1)
+            if i_lip.size(0) > 0:
+                lip_delta[i_lip] = self.wrapper.retarget_lip(x_s_user[i_lip].squeeze(1), combined_lip_ratio_tensor[i_lip].squeeze(1)).unsqueeze(1)
             
             x_d_new = x_d_new + eyes_delta + lip_delta
 
