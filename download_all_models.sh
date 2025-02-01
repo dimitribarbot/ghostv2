@@ -69,3 +69,5 @@ wget -O spade_generator.safetensors https://github.com/dimitribarbot/ghostv2/rel
 wget -O stitching_retargeting_module.safetensors https://github.com/dimitribarbot/ghostv2/releases/download/v1.0.0/live_portrait_stitching_retargeting_module.safetensors
 wget -O warping_module.safetensors https://github.com/dimitribarbot/ghostv2/releases/download/v1.0.0/live_portrait_warping_module.safetensors
 cd ../..
+
+python3 download_hf_models.py

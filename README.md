@@ -49,3 +49,174 @@ To download all the needed models for inference, dataset preprocessing and train
 ```bash
 sh download_all_models.sh
 ```
+
+## Usage
+
+For the moment, face swap only works for single images containing a single face (otherwise the first face will be used, sorted by left eye coordinate and then right eye).
+
+Run inference using the default GhostV2 checkpoint by giving the path to a source file containing the face to swap in the target at target file path. The output image will be created at output file path:
+```bash
+python inference.py --source_file_path={PATH_TO_IMAGE} --target_file_path={PATH_TO_IMAGE} --output_file_path={PATH_TO_IMAGE}
+```
+
+Note that an [NSFW filter](https://huggingface.co/AdamCodd/vit-base-nsfw-detector) has been added to prevent the creation of malicious content.
+
+### Inference Options
+
+By default, after main model inference, an enhancing step using [GFPGAN v1.4](https://github.com/TencentARC/GFPGAN) model will be performed, followed by a face paste back step. For this step, we provide multiple options:
+- `ghost`: adapted from the GhostV1, this version uses [FaceAlignment](https://github.com/1adrianb/face-alignment) to get face landmarks in source and target images to paste the output face back in the target image. This option is the default one.
+- `facexlib_with_parser`: the code was greatly inspired by [facexlib](https://github.com/xinntao/facexlib). This version uses [face-parsing.PyTorch](https://github.com/zllrunning/face-parsing.PyTorch) internally to parse the output face and paste it back in the target image.
+- `facexlib_without_parser`: the code was greatly inspired by [facexlib](https://github.com/xinntao/facexlib). This version only uses code to paste the output face back in the target image.
+- `insightface`: the code was greatly inspired by [insightface](https://github.com/deepinsight/insightface). This version only uses code to paste the output face back in the target image.
+- `basic`: this option directly uses the output of the main model inference to paste the output face back in the target image.
+- `none`: no paste back will be done, the returned image will be the swapped face only (256x256), not the face swapped in the target image.
+
+Eventually, after paste back, an extra step may be done when choosing either `ghost` or `facexlib_with_parser` paste back option. We propose to use inpaint face edges using the [SDXL inpainting model](https://huggingface.co/diffusers/stable-diffusion-xl-1.0-inpainting-0.1) to improve the output results.
+
+All command line optional parameters can be found in this [argument file](./utils/inference/inference_arguments.py).
+
+### GhostV1 Inference
+
+It is still possible to run inference with the original version of Ghost for comparison. To do that, first run the `download_all_models.sh` script and then run the inference script with the `--G_path=./weights/GhostV1/G_unet_2blocks.safetensors`, `--face_embeddings=arcface` and `--align_mode=insightface_v1` parameters. Note however that the ArcFace model used internally follows the [InsightFace licence](https://github.com/deepinsight/insightface/tree/master?tab=readme-ov-file#license).
+
+## Dataset Preprocessing
+
+We provide scripts to prepare the datasets used for training. We mainly use two datasets for our training stage:
+- [Laion Face](https://github.com/FacePerceiver/LAION-Face) dataset: this dataset contains 50 million images with faces. For our pretrained model, we only downloaded the first part out of the 32 parts it contains.
+- [Lagenda](https://wildchlamydia.github.io/lagenda/) dataset: originally used for age and gender recognition tasks, this dataset is well suited for our face swap task. It can be used to train a model faster than with the Laion-Face dataset.
+
+We experimented a lot with the dataset preprocessing and we come up with the following proposed solution:
+- We exclude images that are too small and contain faces that are too small,
+- We use [FaceAlignment](https://github.com/1adrianb/face-alignment) and [Live Portrait](https://github.com/KwaiVGI/LivePortrait) landmark models and code to exclude faces which are not fully visible,
+- We use [Live Portrait](https://github.com/KwaiVGI/LivePortrait) to generate various versions of the same face with random facial expressions,
+- We optionnaly use [GFPGAN v1.2](https://github.com/TencentARC/GFPGAN) to enhance face quality.
+
+Specific arguments for the Laion-Face dataset, such as the dataset location, can be found in this [argument file](./utils/preprocessing/preprocess_laion_arguments.py).
+Specific arguments for the Lagenda dataset, such as the dataset location, can be found in this [argument file](./utils/preprocessing/preprocess_lagenda_arguments.py).
+
+N.B.: For the Laion Face dataset, you may want to download it using the explanations given [here](https://github.com/FacePerceiver/LAION-Face/issues/10#issuecomment-1694407485).
+
+### Face Alignment
+
+We tried multiple alignment techniques while preprocessing datasets, and it seems to us that the latest version of the insightface alignment code gives the best results. The list of the distinct alignment techniques and other preprocessing parameters can be found in this [argument file](./utils/preprocessing/preprocess_arguments.py).
+
+It is also possible to compare the various alignment modes by running the following command:
+
+For a single image:
+```bash
+python align.py --source_image={PATH_TO_IMAGE} --aligned_folder={OUTPUT_PATH} --align_mode={ALIGN_OPTION}
+```
+
+Or for an entire folder:
+```bash
+python align.py --source_folder={PATH_TO_IMAGES} --aligned_folder={OUTPUT_PATH} --align_mode={ALIGN_OPTION}
+```
+
+All alignment command line parameters can be found in this [argument file](./utils/preprocessing/align_arguments.py).
+
+### Dataset Image Format
+
+You may want to convert your images to a common .jpg or .png format. To do that recursively on a huge amount of images, you can use the following script:
+
+For a single image:
+```bash
+python convert.py --source_image={PATH_TO_IMAGE} --output_folder={OUTPUT_PATH} --output_extension={EXTENSION_OPTION}
+```
+
+Or for an entire folder:
+```bash
+python convert.py --source_folder={PATH_TO_IMAGES} --output_folder={OUTPUT_PATH} --output_extension={EXTENSION_OPTION}
+```
+
+Where `EXTENSION_OPTION` is either `.png` or `.jpg`.
+
+All conversion command line parameters can be found in this [argument file](./utils/preprocessing/convert_arguments.py).
+
+## Training
+  
+To train GhostV2, you can run the following script:
+```bash
+python train.py
+```
+
+### Training Options
+
+We provide a lot of different options for training.
+
+Internally, we detect faces using the [Pytorch RetinaFace](https://github.com/biubug6/Pytorch_Retinaface) model. We then compute face embeddings using one of the available face recognition models:
+- The original [ArcFace](https://github.com/deepinsight/insightface/tree/master/recognition/arcface_torch) model, used by the initial version of Ghost (beware, the model is available for non-commercial research purposes only),
+- [AdaFace](https://github.com/mk-minchul/AdaFace), a concurrent model of ArcFace,
+- [CVLFace](https://github.com/mk-minchul/CVLface), by the creator of AdaFace, proposing various face recognition models,
+- [Facenet Pytorch](https://github.com/timesler/facenet-pytorch), the Pytorch version of David Sandberg's tensorflow facenet.
+
+By default we use ViT AdaFace, which apparently gives the best results, especially in terms of identity preservation.
+
+More information regarding each option you can be found in this [argument file](./utils/training/training_arguments.py). If you want to use wandb logging for your experiments, you should login to wandb first  `--wandb login`.
+
+N.B.: The `--example_images_path` must points to a folder containing test images cropped using the alignment method used to generate your training dataset.
+
+### Face Embeddings
+
+It is possible to compute the distance between embeddings computed using either distinct face recognition models or distinct face alignment modes or both. This is useful if you want to know if you can substitute a face recognition model or a face alignment algorithm for a given face swap model.
+
+To do that, you can run the following script:
+
+```bash
+python embedding_distance.py
+```
+
+And playing with the `--source_face_embeddings`, `--target_face_embeddings`, `--source_crop_size`, `--target_crop_size`, `--source_align_mode` and `--target_align_mode` parameters.
+
+All command line parameters can be found in this [argument file](./utils/preprocessing/embedding_distance_arguments.py).
+
+### Our Experiments
+
+Our pretrained model was trained on a single RTX 4090 card using FP16 mixed precision using the Laion-Face dataset preprocessed as explained in the [Dataset Preprocessing](#dataset-preprocessing) section above (around 300000 faces, each one with 10 distinct facial expressions, using insightface_v2 as aligment algorithm) and the CVL ViT face embedding model.
+
+It consisted of two phases:
+- A first run of 4 epochs (~20 hours) with a batch size of 32 and default parameters set in the training arguments file (no scheduler),
+- A second run of 1 epoch (~20 hours as well) with a batch size of 16 (due to the 24GB memory limit of the RTX 4090 card), `--eye_detector_loss` enabled, `--weight_id=70` and `--weight_eyes=1200`, and using the G and D files of the previous run. We also use a scheduler for both the G and D models by setting the `--use_scheduler` flag and the default scheduler parameters of the training arguments file.
+
+### Tips
+1. In case of finetuning you can variate losses coefficients to make the output look similar to the source identity, or vice versa, to save features and attributes of target face.
+2. You can change the backbone of the attribute encoder and num_blocks of AAD ResBlk using parameters `--backbone` and `--num_blocks`.
+3. During the finetuning stage you can use our pretrain weights for generator and discriminator that are located in the `weights` folder. We provide the weights for models with U-Net backbone with 2 blocks in AAD ResBlk.
+
+## License
+
+The pretrained models and source code of this repository are under the BSD-3 Clause license.
+
+|file|source|license|
+|----|------|-------|
+| [GhostV2 Discriminator](https://github.com/dimitribarbot/ghostv2/releases/download/v1.0.0/GhostV2_D_unet_2blocks.safetensors) (v1) | [dimitribarbot/ghostv2](https://github.com/dimitribarbot/ghostv2) | ![license](https://img.shields.io/badge/license-BSD_3-green.svg) |
+| [GhostV2 Generator](https://github.com/dimitribarbot/ghostv2/releases/download/v1.0.0/GhostV2_G_unet_2blocks.safetensors) (v1) | [dimitribarbot/ghostv2](https://github.com/dimitribarbot/ghostv2) | ![license](https://img.shields.io/badge/license-BSD_3-green.svg) |
+
+## Thanks
+
+The models and code used in this repository are:
+
+|file|source|license|
+|----|------|-------|
+| [Ghost](https://github.com/dimitribarbot/ghostv2/releases/download/v1.0.0/GhostV1_G_unet_2blocks.safetensors) (v1) | [ai-forever/ghost](https://github.com/ai-forever/ghost) | ![license](https://img.shields.io/badge/license-Apache_2.0-green.svg) |
+| [AdaFace](https://github.com/dimitribarbot/ghostv2/releases/download/v1.0.0/adaface_ir101_webface12m.safetensors) | [mk-minchul/AdaFace](https://github.com/mk-minchul/AdaFace) | ![license](https://img.shields.io/badge/license-MIT-green.svg) |
+| [CVL ArcFace IR101](https://github.com/dimitribarbot/ghostv2/releases/download/v1.0.0/cvlface_arcface_ir101_webface4m.safetensors) | [mk-minchul/CVLface](https://github.com/mk-minchul/CVLface) | ![license](https://img.shields.io/badge/license-MIT-green.svg) |
+| [CVL AdaFace IR101](https://github.com/dimitribarbot/ghostv2/releases/download/v1.0.0/cvlface_adaface_ir101_webface12m.safetensors) | [mk-minchul/CVLface](https://github.com/mk-minchul/CVLface) | ![license](https://img.shields.io/badge/license-MIT-green.svg) |
+| [CVL AdaFace ViT](https://github.com/dimitribarbot/ghostv2/releases/download/v1.0.0/cvlface_adaface_vit_base_webface4m.safetensors) | [mk-minchul/CVLface](https://github.com/mk-minchul/CVLface) | ![license](https://img.shields.io/badge/license-MIT-green.svg) |
+| [CVL AdaFace DFA mobilenet](https://github.com/dimitribarbot/ghostv2/releases/download/v1.0.0/cvlface_DFA_mobilenet.safetensors) | [mk-minchul/CVLface](https://github.com/mk-minchul/CVLface) | ![license](https://img.shields.io/badge/license-MIT-green.svg) |
+| [Facenet Pytorch](https://github.com/dimitribarbot/ghostv2/releases/download/v1.0.0/facenet_pytorch.safetensors) | [timesler/facenet-pytorch](https://github.com/timesler/facenet-pytorch) | ![license](https://img.shields.io/badge/license-MIT-green.svg) |
+| [AdaptiveWingLoss](https://github.com/dimitribarbot/ghostv2/releases/download/v1.0.0/WFLW_4HG.safetensors) | [protossw512/AdaptiveWingLoss](https://github.com/protossw512/AdaptiveWingLoss) | ![license](https://img.shields.io/badge/license-Apache_2.0-green.svg) |
+| [Pytorch RetinaFace](https://github.com/dimitribarbot/ghostv2/releases/download/v1.0.0/RetinaFace_Resnet50_Final.safetensors) | [biubug6/Pytorch_Retinaface](https://github.com/biubug6/Pytorch_Retinaface) | ![license](https://img.shields.io/badge/license-MIT-green.svg) |
+| [Face Alignment](https://github.com/dimitribarbot/ghostv2/releases/download/v1.0.0/face_alignment_landmark.safetensors) | [1adrianb/face-alignment](https://github.com/1adrianb/face-alignment) | ![license](https://img.shields.io/badge/license-BSD_3-green.svg) |
+| [Face Parsing Pytorch](https://github.com/dimitribarbot/ghostv2/releases/download/v1.0.0/bisenet_79999_iter.safetensors) | [zllrunning/face-parsing.PyTorch](https://github.com/zllrunning/face-parsing.PyTorch) | ![license](https://img.shields.io/badge/license-MIT-green.svg) |
+| [Live Portrait Appearance Feature Extractor](https://github.com/dimitribarbot/ghostv2/releases/download/v1.0.0/live_portrait_appearance_feature_extractor.safetensors) | [KwaiVGI/LivePortrait](https://github.com/KwaiVGI/LivePortrait) | ![license](https://img.shields.io/badge/license-MIT-green.svg) |
+| [Live Portrait Landmark](https://github.com/dimitribarbot/ghostv2/releases/download/v1.0.0/live_portrait_landmark.safetensors) | [KwaiVGI/LivePortrait](https://github.com/KwaiVGI/LivePortrait) | ![license](https://img.shields.io/badge/license-MIT-green.svg) |
+| [Live Portrait Motion Extractor](https://github.com/dimitribarbot/ghostv2/releases/download/v1.0.0/live_portrait_motion_extractor.safetensors) | [KwaiVGI/LivePortrait](https://github.com/KwaiVGI/LivePortrait) | ![license](https://img.shields.io/badge/license-MIT-green.svg) |
+| [Live Portrait Spade Generator](https://github.com/dimitribarbot/ghostv2/releases/download/v1.0.0/live_portrait_spade_generator.safetensors) | [KwaiVGI/LivePortrait](https://github.com/KwaiVGI/LivePortrait) | ![license](https://img.shields.io/badge/license-MIT-green.svg) |
+| [Live Portrait Stitching Retargeting Module](https://github.com/dimitribarbot/ghostv2/releases/download/v1.0.0/live_portrait_stitching_retargeting_module.safetensors) | [KwaiVGI/LivePortrait](https://github.com/KwaiVGI/LivePortrait) | ![license](https://img.shields.io/badge/license-MIT-green.svg) |
+| [Live Portrait Warping Module](https://github.com/dimitribarbot/ghostv2/releases/download/v1.0.0/live_portrait_warping_module.safetensors) | [KwaiVGI/LivePortrait](https://github.com/KwaiVGI/LivePortrait) | ![license](https://img.shields.io/badge/license-MIT-green.svg) |
+| [GFPGANv1.2](https://github.com/dimitribarbot/ghostv2/releases/download/v1.0.0/GFPGANCleanv1-NoCE-C2.safetensors) | [TencentARC/GFPGAN](https://github.com/TencentARC/GFPGAN) | ![license](https://img.shields.io/badge/license-Apache_2.0-green.svg) |
+| [GFPGANv1.4](https://github.com/dimitribarbot/ghostv2/releases/download/v1.0.0/GFPGANv1.4.safetensors) | [TencentARC/GFPGAN](https://github.com/TencentARC/GFPGAN) | ![license](https://img.shields.io/badge/license-Apache_2.0-green.svg) |
+| InsightFace (code) | [deepinsight/insightface](https://github.com/deepinsight/insightface) | ![license](https://img.shields.io/badge/license-MIT-green.svg) |
+| [ArcFace](https://github.com/dimitribarbot/ghostv2/releases/download/v1.0.0/arcface_backbone.safetensors) (optional) | [deepinsight/insightface](https://github.com/deepinsight/insightface) | ![license](https://img.shields.io/badge/license-non_commercial-red.svg) |
+
+Thanks to everyone who makes this project possible!

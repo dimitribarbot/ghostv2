@@ -30,3 +30,5 @@ mkdir -p ./weights/BiSeNet
 cd ./weights/BiSeNet
 wget -O 79999_iter.safetensors https://github.com/dimitribarbot/ghostv2/releases/download/v1.0.0/bisenet_79999_iter.safetensors
 cd ../..
+
+python3 download_hf_models.py
