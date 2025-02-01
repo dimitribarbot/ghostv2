@@ -18,8 +18,8 @@ class EmbeddingDistanceArguments(EmbeddingModelsArguments):
 
     """ Model arguments """
     retina_face_model_path: str = make_real_path("./weights/RetinaFace/Resnet50_Final.safetensors")
-    cvlface_original_aligner_model_path: str = make_real_path("./weights/CVLFace/cvlface_DFA_mobilenet")  # First run "pip install timm huggingface_hub transformers" to use this
-    cvlface_original_aligner_repository: str = "minchul/cvlface_DFA_mobilenet"  # First run "pip install timm huggingface_hub transformers" to use this
+    cvlface_original_aligner_model_path: str = make_real_path("./weights/CVLFace/cvlface_DFA_mobilenet")
+    cvlface_original_aligner_repository: str = "minchul/cvlface_DFA_mobilenet"
     cvlface_aligner_model_path: str = make_real_path("./weights/CVLFace/cvlface_DFA_mobilenet.safetensors")
     source_face_embeddings: str = choice("facenet", "arcface", "adaface", "cvl_arcface", "cvl_adaface", "cvl_vit", default="cvl_vit")
     target_face_embeddings: str = choice("facenet", "arcface", "adaface", "cvl_arcface", "cvl_adaface", "cvl_vit", default="cvl_vit")

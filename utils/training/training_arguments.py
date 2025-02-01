@@ -36,7 +36,7 @@ class TrainingArguments(EmbeddingModelsArguments):
     face_embeddings: str = choice("facenet", "arcface", "adaface", "cvl_arcface", "cvl_adaface", "cvl_vit", default="cvl_vit")  # Model used for face embeddings
     backbone: str = choice("unet", "linknet", "resnet", default="unet")     # Backbone for attribute encoder
     num_blocks: int = 2                                                     # Numbers of AddBlocks at AddResblock
-    align_corners: bool = flag(default=False, negative_prefix="--no-")       # If we should align corners when upsampling
+    align_corners: bool = flag(default=True, negative_prefix="--no-")       # If we should align corners when upsampling
     same_person: float = 0.2                                                # Probability of using same person identity during training
     same_identity: bool = flag(default=True, negative_prefix="--no-")       # Using simswap approach, when source_id = target_id. Only possible with laion=True
     diff_eq_same: bool = flag(default=False, negative_prefix="--no-")       # Don't use info about where is different identities
