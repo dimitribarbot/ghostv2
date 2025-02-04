@@ -2,8 +2,33 @@
 
 The goal of this project is to try to implement [Ghost](https://github.com/ai-forever/ghost) but with other face detection and recognition models than InsightFace RetinaFace and ArcFace to allow a more permissive licence than the InsightFace ones. It includes a full rewrite of the original [Ghost](https://github.com/ai-forever/ghost) repository code, by integrating Pytorch Lightning to boost training and using other datasets than VGGFace2.
 
-## Image Swap Results 
+## Image Swap Results
+
 ![](/examples/results/training/source_target_grid.png)
+
+The output are not as good as InsightFace and post-processing is needed to achieve the best results.
+
+Currently, we propose 2 optional post-processing steps :
+- Face restoration using GFPGAN v1.4 (or v1.2),
+- Face edge inpainting using diffusers SDXL inpainting model
+
+Here are comparisons with and without post-processing:
+
+- Without face restoration and without face edge inpainting:
+
+![](/examples/results/training/source_2_full_target_2_full_no_inpaint_no_enhance.png)
+
+- Without face edge inpainting but with face restoration:
+
+![](/examples/results/training/source_2_full_target_2_full_no_inpaint.png)
+
+- Without face restoration but with face edge inpainting:
+
+![](/examples/results/training/source_2_full_target_2_full_no_enhance.png)
+
+- With face restoration and face edge inpainting:
+
+![](/examples/results/training/source_2_full_target_2_full.png)
 
 ## Reminder of GHOST Ethics
 
@@ -78,6 +103,16 @@ All command line optional parameters can be found in this [argument file](./util
 ### GhostV1 Inference
 
 It is still possible to run inference with the original version of Ghost for comparison. To do that, first run the `download_all_models.sh` script and then run the inference script with the `--G_path=./weights/GhostV1/G_unet_2blocks.safetensors`, `--face_embeddings=arcface` and `--align_mode=insightface_v1` parameters. Note however that the ArcFace model used internally follows the [InsightFace licence](https://github.com/deepinsight/insightface/tree/master?tab=readme-ov-file#license).
+
+### Demo
+
+It is possible to replicate the source/target matrix of the [Image Swap Results](#image-swap-results) section by running the following script:
+
+```bash
+python demo.py
+```
+
+Internally, it uses the same command line parameters as for inference. Options can be found in this [argument file](./utils/inference/inference_arguments.py).
 
 ## Dataset Preprocessing
 
@@ -182,6 +217,13 @@ It consisted of two phases:
 2. You can change the backbone of the attribute encoder and num_blocks of AAD ResBlk using parameters `--backbone` and `--num_blocks`.
 3. During the finetuning stage you can use our pretrain weights for generator and discriminator that are located in the `weights` folder. We provide the weights for models with U-Net backbone with 2 blocks in AAD ResBlk.
 
+## Discussion & Improvements
+
+This project can still be improved. At least the following parts can be improved:
+- Add video face swap as in original Ghost repository,
+- Code style: some code files can be improved.
+
+
 ## License
 
 The pretrained models and source code of this repository are under the BSD-3 Clause license.
@@ -216,6 +258,8 @@ The models and code used in this repository are:
 | [Live Portrait Warping Module](https://github.com/dimitribarbot/ghostv2/releases/download/v1.0.0/live_portrait_warping_module.safetensors) | [KwaiVGI/LivePortrait](https://github.com/KwaiVGI/LivePortrait) | ![license](https://img.shields.io/badge/license-MIT-green.svg) |
 | [GFPGANv1.2](https://github.com/dimitribarbot/ghostv2/releases/download/v1.0.0/GFPGANCleanv1-NoCE-C2.safetensors) | [TencentARC/GFPGAN](https://github.com/TencentARC/GFPGAN) | ![license](https://img.shields.io/badge/license-Apache_2.0-green.svg) |
 | [GFPGANv1.4](https://github.com/dimitribarbot/ghostv2/releases/download/v1.0.0/GFPGANv1.4.safetensors) | [TencentARC/GFPGAN](https://github.com/TencentARC/GFPGAN) | ![license](https://img.shields.io/badge/license-Apache_2.0-green.svg) |
+| [NSFW Filter](https://huggingface.co/AdamCodd/vit-base-nsfw-detector/resolve/main/model.safetensors) | [AdamCodd/vit-base-nsfw-detector](https://huggingface.co/AdamCodd/vit-base-nsfw-detector) | ![license](https://img.shields.io/badge/license-Apache_2.0-green.svg) |
+| [SDXL Inpainting](https://huggingface.co/diffusers/stable-diffusion-xl-1.0-inpainting-0.1/resolve/main/unet/diffusion_pytorch_model.fp16.safetensors) | [diffusers/stable-diffusion-xl-1.0-inpainting-0.1](https://huggingface.co/diffusers/stable-diffusion-xl-1.0-inpainting-0.1) | ![license](https://img.shields.io/badge/license-Open_RAIL++-green.svg) |
 | InsightFace (code) | [deepinsight/insightface](https://github.com/deepinsight/insightface) | ![license](https://img.shields.io/badge/license-MIT-green.svg) |
 | [ArcFace](https://github.com/dimitribarbot/ghostv2/releases/download/v1.0.0/arcface_backbone.safetensors) (optional) | [deepinsight/insightface](https://github.com/deepinsight/insightface) | ![license](https://img.shields.io/badge/license-non_commercial-red.svg) |
 

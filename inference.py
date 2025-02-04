@@ -14,7 +14,7 @@ import torch
 from torch.utils.data import DataLoader
 from safetensors.torch import load_file
 import lightning as L
-from diffusers import AutoPipelineForInpainting
+from diffusers import AutoPipelineForInpainting, logging
 from transformers import AutoModelForImageClassification, ViTImageProcessor
 
 from FaceAlignment.api import FaceAlignment, LandmarksType
@@ -47,6 +47,8 @@ print("finished imports")
 
 torch.set_float32_matmul_precision("high")
 torch.backends.cudnn.benchmark = True
+
+logging.set_verbosity_error()
 
 
 class GhostV2DataModule(L.LightningDataModule):
@@ -212,17 +214,19 @@ class GhostV2Module(L.LightningModule):
         Xs_face_landmarks_68 = None
         Xt_face_landmarks_68 = None
         if self.paste_back_mode == "ghost":
+            print(f"Getting source and target landmarks")
             Xs_face_box = Xs_detected_faces[self.source_face_index]["box"]
             Xt_face_box = Xt_detected_faces[self.target_face_index]["box"]
 
-            Xs_landmarks_68 = self.face_alignment.get_landmarks_from_image(
-                Xs_image[:, :, ::-1],
-                detected_faces=[Xs_face_box],
-            )[0]
-            Xt_landmarks_68 = self.face_alignment.get_landmarks_from_image(
-                Xt_image[:, :, ::-1],
-                detected_faces=[Xt_face_box],
-            )[0]
+            with torch.autocast(device_type=self.device.type, enabled=False):
+                Xs_landmarks_68 = self.face_alignment.get_landmarks_from_image(
+                    Xs_image[:, :, ::-1],
+                    detected_faces=[Xs_face_box],
+                )[0]
+                Xt_landmarks_68 = self.face_alignment.get_landmarks_from_image(
+                    Xt_image[:, :, ::-1],
+                    detected_faces=[Xt_face_box],
+                )[0]
             Xs_face_landmarks_68 = trans_points2d(Xs_landmarks_68, Xs_affine_matrix)
             Xt_face_landmarks_68 = trans_points2d(Xt_landmarks_68, Xt_affine_matrix)
         
@@ -243,6 +247,7 @@ class GhostV2Module(L.LightningModule):
             cv2.imwrite(self.debug_source_face_path, Xs_face_debug)
             cv2.imwrite(self.debug_target_face_path, Xt_face_debug)
 
+        print(f"Getting source face embeddings")
         Xs_face_tensor = convert_to_batch_tensor(Xs_face, self.device)
         Xt_face_tensor = convert_to_batch_tensor(Xt_face, self.device)
 
@@ -256,6 +261,7 @@ class GhostV2Module(L.LightningModule):
             cv2.imwrite(self.debug_swapped_face_path, Yt_face)
 
         if self.enhance_output:
+            print(f"Using face restoration to enhance face output")
             Yt_face_enhanced = cv2.resize(Yt_face, (512, 512), interpolation=cv2.INTER_LINEAR)
             Yt_face_enhanced = enhance_face(self.gfpgan, Yt_face_enhanced, "output", self.device)
             Yt_face_enhanced = cv2.resize(Yt_face_enhanced, (256, 256), interpolation=cv2.INTER_LINEAR)
@@ -265,7 +271,9 @@ class GhostV2Module(L.LightningModule):
         if self.debug:
             os.makedirs(os.path.dirname(self.debug_enhanced_face_path), exist_ok=True)
             cv2.imwrite(self.debug_enhanced_face_path, Yt_face_enhanced)
-
+    
+        if self.paste_back_mode != "none":
+            print(f"Pasting face back in target image using {self.paste_back_mode} mode")
         if self.paste_back_mode == "facexlib_with_parser":
             Yt_image, Yt_mask = paste_face_back_facexlib(self.face_parser, Xt_image, Yt_face_enhanced, Xt_affine_matrix, True, self.device)
         elif self.paste_back_mode == "facexlib_without_parser":
@@ -283,6 +291,7 @@ class GhostV2Module(L.LightningModule):
             Yt_mask = None
         
         if self.inpaint_output and Yt_mask is not None:
+            print(f"Using face edge inpainting to enhance face output")
             Yt_image_rgba = cv2.cvtColor(Yt_image, cv2.COLOR_BGR2RGBA)
             Yt_edge_mask = get_edge_mask(Yt_mask)
 
