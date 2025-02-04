@@ -19,7 +19,7 @@ class InferenceArguments(EmbeddingModelsArguments):
     output_file_path: str = make_real_path("./examples/results/inference/source1_target1.jpg")
 
     """ Model params """
-    G_path: str = make_real_path("./weights/GhostV2/GhostV2_G_unet_2blocks.safetensors")
+    G_path: str = make_real_path("./weights/GhostV2/G_unet_2blocks.safetensors")
     gfpgan_model_path: str = make_real_path("./weights/GFPGAN/GFPGANv1.4.safetensors")
     face_alignment_model_path: str = make_real_path("./weights/FaceAlignment/landmark.safetensors")
     face_parser_model_path: str = make_real_path("./weights/BiSeNet/79999_iter.safetensors")
