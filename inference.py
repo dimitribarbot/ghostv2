@@ -14,7 +14,8 @@ import torch
 from torch.utils.data import DataLoader
 from safetensors.torch import load_file
 import lightning as L
-from diffusers import AutoPipelineForInpainting, logging
+from diffusers import AutoPipelineForInpainting
+from diffusers.utils.logging import set_verbosity_error
 from transformers import AutoModelForImageClassification, ViTImageProcessor
 
 from FaceAlignment.api import FaceAlignment, LandmarksType
@@ -48,7 +49,7 @@ print("finished imports")
 torch.set_float32_matmul_precision("high")
 torch.backends.cudnn.benchmark = True
 
-logging.set_verbosity_error()
+set_verbosity_error()
 
 
 class GhostV2DataModule(L.LightningDataModule):
@@ -247,12 +248,14 @@ class GhostV2Module(L.LightningModule):
             cv2.imwrite(self.debug_source_face_path, Xs_face_debug)
             cv2.imwrite(self.debug_target_face_path, Xt_face_debug)
 
-        print(f"Getting source face embeddings")
         Xs_face_tensor = convert_to_batch_tensor(Xs_face, self.device)
         Xt_face_tensor = convert_to_batch_tensor(Xt_face, self.device)
 
         with torch.no_grad():
+            print(f"Getting source face embeddings")
             Xs_embed = get_face_embeddings(Xs_face_tensor, self.embedding_model, self.face_embeddings)
+            
+            print(f"Running generator inference")
             Yt_face, _ = self.G(Xt_face_tensor, Xs_embed)
             Yt_face = torch2image(Yt_face)[:, :, ::-1]
 
