@@ -231,6 +231,7 @@ Here are comparisons with and without post-processing:
 This project can still be improved. Here is a list of known topics:
 - Add video face swap as in original Ghost repository.
 - Use Pytorch Lightning CLI to train the model using various configurations.
+- Create an onnx version of the pretrained model.
 - And of course, improve the face swap result!
 
 ## License
