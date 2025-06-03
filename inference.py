@@ -185,8 +185,8 @@ class GhostV2Module(L.LightningModule):
         if Xt_image_nsfw_predicted_class == "nsfw":
             raise ValueError("NSFW detected in target image! Aborting.")
 
-        Xs_detected_faces = self.face_detector(Xs_image, threshold=self.detection_threshold, return_dict=True, cv=True)
-        Xt_detected_faces = self.face_detector(Xt_image, threshold=self.detection_threshold, return_dict=True, cv=True)
+        Xs_detected_faces = self.face_detector(Xs_image, threshold=self.detection_threshold, max_size=1280, return_dict=True, cv=True)
+        Xt_detected_faces = self.face_detector(Xt_image, threshold=self.detection_threshold, max_size=1280, return_dict=True, cv=True)
 
         if len(Xs_detected_faces) == 0:
             raise ValueError("No face detected in source image!")
